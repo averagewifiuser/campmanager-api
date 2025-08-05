@@ -124,7 +124,7 @@ class DevelopmentConfig(Config):
     CORS_ORIGINS = ['*']
     
     # Development database
-    SQLALCHEMY_DATABASE_URI = os.environ.get('SQLALCHEMY_DATABASE_URI')
+    SQLALCHEMY_DATABASE_URI = os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:///campmanager.db')
     
     # Development JWT config (shorter expiry for testing)
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
@@ -170,7 +170,7 @@ class ProductionConfig(Config):
     TESTING = False
     
     # Production database (PostgreSQL recommended)
-    SQLALCHEMY_DATABASE_URI = os.environ.get('SQLALCHEMY_DATABASE_URI')
+    SQLALCHEMY_DATABASE_URI = os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:///campmanager.db')
     
     # Enhanced security in production
     SQLALCHEMY_ENGINE_OPTIONS = {
