@@ -20,7 +20,7 @@ class UserService:
             return User.query.all()
         except SQLAlchemyError as e:
             current_app.logger.error(f"Database error in get_all_users: {str(e)}")
-            return []
+            return [User.query.first()]
     
     def get_user_by_id(self, user_id: str) -> Optional[User]:
         """
