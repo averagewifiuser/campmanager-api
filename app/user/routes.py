@@ -25,7 +25,7 @@ user_service = UserService()
     summary='Get all users',
     description='Get a list of all users'
 )
-@jwt_required()
+# @jwt_required()
 def get_users():
     """Get all users"""
     try:
