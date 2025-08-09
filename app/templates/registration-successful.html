@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en" style="margin:0;padding:0;">
+  <head>
+    <meta charset="utf-8">
+    <meta name="x-apple-disable-message-reformatting">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Registration Successful</title>
+    <style>
+      /* Mobile tweaks */
+      @media (max-width:600px){
+        .container{width:100% !important;}
+        .p-24{padding:16px !important;}
+        .text-center-sm{text-align:center !important;}
+        .stack-sm{display:block !important;width:100% !important;}
+      }
+    </style>
+  </head>
+  <body style="margin:0;padding:0;background:#f8fafc;">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f8fafc;">
+      <tr>
+        <td align="center" style="padding:24px;">
+          <table role="presentation" class="container" cellpadding="0" cellspacing="0" width="600" style="width:600px;max-width:600px;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;overflow:hidden;">
+            <tr>
+              <td class="p-24" style="padding:24px;text-align:center;">
+                <!-- Success Icon -->
+                <div style="margin-bottom:16px;">
+                  <svg width="64" height="64" viewBox="0 0 24 24" fill="#16a34a" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Success">
+                    <path d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2Zm4.707 7.293-5.657 5.657a1 1 0 0 1-1.414 0L7.293 12.607a1 1 0 1 1 1.414-1.414l1.343 1.343 4.95-4.95a1 1 0 1 1 1.414 1.414Z"/>
+                  </svg>
+                </div>
+
+                <h1 style="margin:0 0 4px 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:1.3;color:#065f46;font-weight:700;">
+                  Registration Successful! 🎉
+                </h1>
+
+                <p style="margin:0 0 20px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#6b7280;">
+                  Thank you for registering for <strong style="color:#111827;">{{camp_name}}</strong>!
+                </p>
+
+                <!-- Registration Details Card -->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ecfdf5;border:1px solid #bbf7d0;border-radius:10px;margin:0 0 20px 0;">
+                  <tr>
+                    <td style="padding:20px;text-align:left;">
+                      <h3 style="margin:0 0 12px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;color:#065f46;font-weight:700;">
+                        Registration Details
+                      </h3>
+
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#065f46;">
+                        <tr>
+                          <td class="stack-sm" style="padding:6px 0;color:#047857;">Participant:</td>
+                          <td class="stack-sm" style="padding:6px 0;text-align:right;color:#111827;font-weight:600;">
+                            {{participant_surname}} {{participant_middle_name}} {{participant_last_name}}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="stack-sm" style="padding:6px 0;color:#047857;">Camper Code:</td>
+                          <td class="stack-sm" style="padding:6px 0;text-align:right;color:#111827;font-weight:600;">
+                            {{camper_code}}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="stack-sm" style="padding:6px 0;color:#047857;">Registration Fee:</td>
+                          <td class="stack-sm" style="padding:6px 0;text-align:right;color:#111827;font-weight:600;">
+                            {{total_amount}}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="stack-sm" style="padding:6px 0;color:#047857;">Payment Status:</td>
+                          <td class="stack-sm" style="padding:6px 0;text-align:right;">
+                            <!-- Replace {{payment_status}} with "Paid" or "Payment Pending".
+                                 Optionally swap the badge color. -->
+                            <span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;background: {{#if is_paid}} #065f46 {{else}} #fee2e2 {{/if}} ; color: {{#if is_paid}} #ffffff {{else}} #991b1b {{/if}} ;">
+                              {{payment_status}}
+                            </span>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="stack-sm" style="padding:6px 0;color:#047857;">Registration Date:</td>
+                          <td class="stack-sm" style="padding:6px 0;text-align:right;color:#111827;font-weight:600;">
+                            {{registration_date}}
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- What's Next -->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;margin:0 0 20px 0;">
+                  <tr>
+                    <td style="padding:20px;text-align:left;">
+                      <h3 style="margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;color:#1e40af;font-weight:700;">
+                        What's Next?
+                      </h3>
+                      <ul style="margin:0;padding:0 0 0 18px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.7;color:#1d4ed8;">
+                        <!-- IF NOT PAID START -->
+                        <li><!-- show only if unpaid --> Complete your payment to secure your spot.</li>
+                        <!-- IF NOT PAID END -->
+                        <li>You'll receive a confirmation email with camp details.</li>
+                        <li>Bring your confirmation on the day of the camp.</li>
+                        <li>Contact us if you have any questions.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Camp Information -->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;margin:0 0 24px 0;">
+                  <tr>
+                    <td style="padding:16px;text-align:left;">
+                      <h3 style="margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#111827;font-weight:700;">
+                        {{camp_name}}
+                      </h3>
+                      <p style="margin:0 0 6px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;">
+                        📅 {{camp_start_date}} – {{camp_end_date}}
+                      </p>
+                      <p style="margin:0 0 6px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;">
+                        📍 {{camp_location}}
+                      </p>
+                      <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;">
+                        ⏰ Registration Deadline: {{camp_registration_deadline}}
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- CTAs -->
+                <p style="margin:0 0 14px 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#6b7280;">
+                  Need help? Contact the camp organizers at
+                  <a href="mailto:{{support_email}}" style="color:#2563eb;text-decoration:underline;">{{support_email}}</a>.
+                </p>
+              </td>
+            </tr>
+          </table>
+
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
