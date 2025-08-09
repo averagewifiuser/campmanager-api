@@ -148,6 +148,7 @@ def submit_registration_by_token(link_token, json_data):
             "camp_registration_deadline": camp.registration_deadline,
             "support_email": "support@campmanager.com"
         })
+        message = f"Your registration for {camp.name} is successful! Your camp code is {new_registration.camper_code}."
         mailer.send_email(
             recipients=[new_registration.email],
             subject='Registration Successful',
