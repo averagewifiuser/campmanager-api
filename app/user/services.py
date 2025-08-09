@@ -8,6 +8,19 @@ from .models import User, db
 
 class UserService:
     """Service class for user-related business logic"""
+
+    def get_all_users(self) -> list[User]:
+        """
+        Get all users
+        
+        Returns:
+            List of User objects
+        """
+        try:
+            return User.query.all()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_all_users: {str(e)}")
+            return []
     
     def get_user_by_id(self, user_id: str) -> Optional[User]:
         """

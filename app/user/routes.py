@@ -19,6 +19,30 @@ user_bp = APIBlueprint('user', __name__, url_prefix='/auth')
 user_service = UserService()
 
 
+@user_bp.get('/users')
+@user_bp.output(UserResponseWrapperSchema)
+@user_bp.doc(
+    summary='Get all users',
+    description='Get a list of all users'
+)
+@jwt_required()
+def get_users():
+    """Get all users"""
+    try:
+        users = user_service.get_all_users()
+        return {
+            'data': [user.to_dict(for_api=True) for user in users]
+        }, 200
+    except Exception as e:
+        current_app.logger.error(f"Get users error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_USERS_ERROR',
+                'message': 'Failed to get users',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
 @user_bp.post('/register')
 @user_bp.input(UserRegistrationRequestSchema)
 @user_bp.doc(
