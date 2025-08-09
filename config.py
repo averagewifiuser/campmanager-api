@@ -99,7 +99,7 @@ class Config:
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or 'uploads'
     
     # Logging config
-    LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
+    LOG_LEVEL = os.environ.get('LOG_LEVEL', 'DEBUG')
     
     # CORS config
     CORS_ORIGINS = ['*']
@@ -184,7 +184,7 @@ class ProductionConfig(Config):
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '').split(',')
     
     # Production logging
-    LOG_LEVEL = 'INFO'
+    LOG_LEVEL = 'DEBUG'
     # LOG_FILE = os.environ.get('LOG_FILE') or '/var/log/campmanager/app.log'
     
     @staticmethod
