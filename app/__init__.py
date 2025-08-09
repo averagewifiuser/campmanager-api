@@ -112,8 +112,8 @@ def create_app(config_name=None):
     configure_api_docs(app)
 
     # Run DB migrations at startup
-    # with app.app_context():
-    #     upgrade()
+    with app.app_context():
+        upgrade()
 
     return app
 
