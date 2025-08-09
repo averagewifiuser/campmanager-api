@@ -153,7 +153,7 @@ def submit_registration_by_token(link_token, json_data):
             recipients=[new_registration.email],
             subject='Registration Successful',
             text=message,
-            html=True,
+            html=False,
         )
         
         return {
