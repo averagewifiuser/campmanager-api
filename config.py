@@ -170,7 +170,7 @@ class ProductionConfig(Config):
     TESTING = False
     
     # Production database (PostgreSQL recommended)
-    SQLALCHEMY_DATABASE_URI = os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:///campmanager.db')
+    SQLALCHEMY_DATABASE_URI = os.environ.get('SQLALCHEMY_DATABASE_URI', '')
     
     # Enhanced security in production
     SQLALCHEMY_ENGINE_OPTIONS = {
@@ -184,8 +184,8 @@ class ProductionConfig(Config):
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '').split(',')
     
     # Production logging
-    LOG_LEVEL = 'WARNING'
-    LOG_FILE = os.environ.get('LOG_FILE') or '/var/log/campmanager/app.log'
+    LOG_LEVEL = 'INFO'
+    # LOG_FILE = os.environ.get('LOG_FILE') or '/var/log/campmanager/app.log'
     
     @staticmethod
     def init_app(app):
