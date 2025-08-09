@@ -256,6 +256,7 @@ class RegistrationResponseSchema(BaseResponseSchema):
     camp_id = fields.String()
     registration_link_id = fields.String(allow_none=True)
     registration_date = fields.DateTime()
+    camper_code = fields.String()
     
     # Nested objects for convenience
     church = fields.Nested(ChurchResponseSchema, dump_only=True)
@@ -622,6 +623,7 @@ class RegistrationResponseSchema(BaseResponseSchema):
     camp_id = fields.String()
     registration_link_id = fields.String(allow_none=True)
     registration_date = fields.DateTime()
+    camper_code = fields.String()
     
     # Nested objects for convenience
     church = fields.Nested(ChurchResponseSchema, dump_only=True)

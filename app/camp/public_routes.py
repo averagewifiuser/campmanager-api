@@ -155,6 +155,7 @@ def submit_registration_by_token(link_token, json_data):
             text=message,
             html=False,
         )
+        print(new_registration.to_dict())
         
         return {
             'data': new_registration.to_dict()
