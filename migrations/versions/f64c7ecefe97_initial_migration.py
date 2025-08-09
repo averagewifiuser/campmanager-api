@@ -1,8 +1,8 @@
-"""Initial migration
+"""initial migration
 
-Revision ID: 520b0cf0469b
+Revision ID: f64c7ecefe97
 Revises: 
-Create Date: 2025-08-02 01:49:56.962280
+Create Date: 2025-08-09 18:51:44.594444
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '520b0cf0469b'
+revision = 'f64c7ecefe97'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -23,7 +23,7 @@ def upgrade():
     sa.Column('password_hash', sa.String(length=255), nullable=False),
     sa.Column('full_name', sa.String(length=255), nullable=False),
     sa.Column('role', sa.Enum('camp_manager', 'volunteer', name='user_roles'), nullable=False),
-    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.PrimaryKeyConstraint('id'),
@@ -38,9 +38,9 @@ def upgrade():
     sa.Column('capacity', sa.Integer(), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('registration_deadline', sa.DateTime(), nullable=False),
-    sa.Column('is_active', sa.Boolean(), nullable=False),
-    sa.Column('camp_manager_id', sa.UUID(), nullable=False),
-    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('is_active', sa.Boolean(), server_default='1', nullable=False),
+    sa.Column('camp_manager_id', sa.String(length=36), nullable=False),
+    sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['camp_manager_id'], ['users.id'], ),
@@ -50,9 +50,9 @@ def upgrade():
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('discount_percentage', sa.Numeric(precision=5, scale=2), nullable=True),
     sa.Column('discount_amount', sa.Numeric(precision=10, scale=2), nullable=True),
-    sa.Column('camp_id', sa.UUID(), nullable=False),
+    sa.Column('camp_id', sa.String(length=36), nullable=False),
     sa.Column('is_default', sa.Boolean(), nullable=False),
-    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['camp_id'], ['camps.id'], ),
@@ -60,8 +60,8 @@ def upgrade():
     )
     op.create_table('churches',
     sa.Column('name', sa.String(length=255), nullable=False),
-    sa.Column('camp_id', sa.UUID(), nullable=False),
-    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('camp_id', sa.String(length=36), nullable=False),
+    sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['camp_id'], ['camps.id'], ),
@@ -72,16 +72,16 @@ def upgrade():
     sa.Column('field_type', sa.Enum('text', 'number', 'dropdown', 'checkbox', 'date', name='field_types'), nullable=False),
     sa.Column('is_required', sa.Boolean(), nullable=False),
     sa.Column('options', sa.JSON(), nullable=True),
-    sa.Column('camp_id', sa.UUID(), nullable=False),
+    sa.Column('camp_id', sa.String(length=36), nullable=False),
     sa.Column('order', sa.Integer(), nullable=False),
-    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['camp_id'], ['camps.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('registration_links',
-    sa.Column('camp_id', sa.UUID(), nullable=False),
+    sa.Column('camp_id', sa.String(length=36), nullable=False),
     sa.Column('link_token', sa.String(length=255), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('allowed_categories', sa.JSON(), nullable=True),
@@ -89,8 +89,8 @@ def upgrade():
     sa.Column('expires_at', sa.DateTime(), nullable=True),
     sa.Column('usage_limit', sa.Integer(), nullable=True),
     sa.Column('usage_count', sa.Integer(), nullable=False),
-    sa.Column('created_by', sa.UUID(), nullable=False),
-    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('created_by', sa.String(length=36), nullable=False),
+    sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['camp_id'], ['camps.id'], ),
@@ -107,16 +107,17 @@ def upgrade():
     sa.Column('phone_number', sa.String(length=20), nullable=False),
     sa.Column('emergency_contact_name', sa.String(length=255), nullable=False),
     sa.Column('emergency_contact_phone', sa.String(length=20), nullable=False),
-    sa.Column('church_id', sa.UUID(), nullable=False),
-    sa.Column('category_id', sa.UUID(), nullable=False),
+    sa.Column('church_id', sa.String(length=36), nullable=False),
+    sa.Column('category_id', sa.String(length=36), nullable=False),
     sa.Column('custom_field_responses', sa.JSON(), nullable=True),
     sa.Column('total_amount', sa.Numeric(precision=10, scale=2), nullable=False),
     sa.Column('has_paid', sa.Boolean(), nullable=False),
     sa.Column('has_checked_in', sa.Boolean(), nullable=False),
-    sa.Column('camp_id', sa.UUID(), nullable=False),
-    sa.Column('registration_link_id', sa.UUID(), nullable=True),
+    sa.Column('camp_id', sa.String(length=36), nullable=False),
+    sa.Column('camper_code', sa.String(length=10), nullable=True),
+    sa.Column('registration_link_id', sa.String(length=36), nullable=True),
     sa.Column('registration_date', sa.DateTime(), nullable=False),
-    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['camp_id'], ['camps.id'], ),
@@ -125,11 +126,17 @@ def upgrade():
     sa.ForeignKeyConstraint(['registration_link_id'], ['registration_links.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    with op.batch_alter_table('registrations', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_registrations_camp_id'), ['camp_id'], unique=False)
+
     # ### end Alembic commands ###
 
 
 def downgrade():
     # ### commands auto generated by Alembic - please adjust! ###
+    with op.batch_alter_table('registrations', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_registrations_camp_id'))
+
     op.drop_table('registrations')
     op.drop_table('registration_links')
     op.drop_table('custom_fields')
