@@ -10,7 +10,8 @@ from .schemas import (
 )
 from .services import RegistrationService, CampService
 from .._shared.auth import optional_auth
-from ..integrations.mailer import Mailer
+from ..integrations.mailer import mailer
+from ..integrations.sms import sms
 
 
 # Create APIBlueprint for public registration endpoints
@@ -131,32 +132,28 @@ def submit_registration_by_token(link_token, json_data):
         new_registration = registration_service.create_registration(registration_data, link_token)
         camp = camp_service.get_camp_by_id(str(link.camp_id))
 
-        mailer = Mailer()
-        # message = mailer.generate_email_text('registration-successful.html', {
-        #     "camp_name": camp.name,
-        #     "participant_surname": new_registration.surname,
-        #     "participant_middle_name": new_registration.middle_name,
-        #     "participant_last_name": new_registration.last_name,
-        #     "camper_code": new_registration.camper_code,
-        #     "total_amount": new_registration.total_amount,
-        #     "is_paid": new_registration.has_paid,
-        #     "payment_status": "Paid" if new_registration.has_paid else "Payment Pending",
-        #     "registration_date": new_registration.created_at,
-        #     "camp_start_date": camp.start_date,
-        #     "camp_end_date": camp.end_date,
-        #     "camp_location": camp.location,
-        #     "camp_registration_deadline": camp.registration_deadline,
-        #     "support_email": "support@campmanager.com"
-        # })
-        message = f"Your registration for {camp.name} is successful! Your camp code is {new_registration.camper_code}."
+        message = mailer.generate_email_text('registration-successful.html', {
+            "camp_name": camp.name,
+            "participant_surname": new_registration.surname,
+            "participant_middle_name": new_registration.middle_name,
+            "participant_last_name": new_registration.last_name,
+            "camper_code": new_registration.camper_code,
+            "total_amount": new_registration.total_amount,
+            "camp_start_date": camp.start_date,
+            "camp_end_date": camp.end_date,
+            "camp_location": camp.location,
+            "support_email": "support@campmanager.com"
+        })
+        sms_message = f'''
+        Hi {new_registration.surname}! Your registration for {camp.name} is confirmed. Camper Code: {new_registration.camper_code}. Start: {camp.start_date}. For help, contact support@campmanager.com.
+        '''
         mailer.send_email(
             recipients=[new_registration.email],
             subject='Registration Successful',
             text=message,
-            html=False,
+            html=True,
         )
-        print(new_registration.to_dict())
-        
+        sms.send_sms(new_registration.phone_number, sms_message)
         return {
             'data': new_registration.to_dict()
         }, 201
