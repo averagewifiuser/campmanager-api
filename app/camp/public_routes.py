@@ -132,27 +132,27 @@ def submit_registration_by_token(link_token, json_data):
         camp = camp_service.get_camp_by_id(str(link.camp_id))
 
         mailer = Mailer()
+        message = mailer.generate_email_text('registration-successful.html', {
+            "camp_name": camp.name,
+            "participant_surname": new_registration.surname,
+            "participant_middle_name": new_registration.middle_name,
+            "participant_last_name": new_registration.last_name,
+            "camper_code": new_registration.camper_code,
+            "total_amount": new_registration.total_amount,
+            "is_paid": new_registration.has_paid,
+            "payment_status": "Paid" if new_registration.has_paid else "Payment Pending",
+            "registration_date": new_registration.created_at,
+            "camp_start_date": camp.start_date,
+            "camp_end_date": camp.end_date,
+            "camp_location": camp.location,
+            "camp_registration_deadline": camp.registration_deadline,
+            "support_email": "support@campmanager.com"
+        })
         mailer.send_email(
-            to_email=new_registration.email,
+            recipients=[new_registration.email],
             subject='Registration Successful',
-            template_name='registration-successful.html',
+            text=message,
             html=True,
-            context={
-                "camp_name": camp.name,
-                "participant_surname": new_registration.surname,
-                "participant_middle_name": new_registration.middle_name,
-                "participant_last_name": new_registration.last_name,
-                "camper_code": new_registration.camper_code,
-                "total_amount": new_registration.total_amount,
-                "is_paid": new_registration.has_paid,
-                "payment_status": "Paid" if new_registration.has_paid else "Payment Pending",
-                "registration_date": new_registration.created_at,
-                "camp_start_date": camp.start_date,
-                "camp_end_date": camp.end_date,
-                "camp_location": camp.location,
-                "camp_registration_deadline": camp.registration_deadline,
-                "support_email": "support@campmanager.com"
-            }
         )
         
         return {
