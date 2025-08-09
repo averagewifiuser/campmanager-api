@@ -43,6 +43,7 @@ class Mailer(object):
 
         response = requests.post(self.api_url, headers=headers, json=payload)
         response.raise_for_status()  # Raise an exception for HTTP errors
+        print(response.json())
         return response.json()
 
 
