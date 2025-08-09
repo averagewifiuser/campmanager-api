@@ -38,7 +38,7 @@ class UserService:
         try:
             return User.query.filter_by(email=email.lower()).first()
         except SQLAlchemyError as e:
-            current_app.logger.error(f"Database error in get_user_by_email: {str(e)}")
+            print(f"Database error in get_user_by_email: {str(e)}")
             return None
     
     def create_user(self, user_data: Dict[str, Any]) -> Optional[User]:
