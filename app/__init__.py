@@ -169,7 +169,7 @@ def register_blueprints(app: APIFlask):
     @app.teardown_appcontext
     def close_db(exception):
         if exception:
-            logger.error(f"Request teardown with exception: {str(exception)}")
+            app.logger.error(f"Request teardown with exception: {str(exception)}")
 
 def configure_api_docs(app: APIFlask):
     """Configure APIFlask documentation"""

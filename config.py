@@ -233,6 +233,6 @@ config = {
 def get_config(config_name: str = None) -> Type[Config]:
     """Get configuration class by name"""
     if config_name is None:
-        config_name = os.environ.get('FLASK_ENV', 'default')
+        config_name = os.environ.get('FLASK_ENV', 'production')
     
     return config.get(config_name, DevelopmentConfig)

@@ -195,7 +195,8 @@ class Registration(BaseModel):
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
     has_paid = db.Column(db.Boolean, default=False, nullable=False)
     has_checked_in = db.Column(db.Boolean, default=False, nullable=False)
-    camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
+    camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False, index=True)
+    camper_code = db.Column(db.String(10), nullable=True, default=None)
     registration_link_id = db.Column(String(36), db.ForeignKey('registration_links.id'))
     registration_date = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     
@@ -240,6 +241,7 @@ class Registration(BaseModel):
             'has_paid': self.has_paid,
             'has_checked_in': self.has_checked_in,
             'camp_id': self.camp_id,
+            'camper_code': self.camper_code,
             'registration_link_id': self.registration_link_id,
             'registration_date': self.registration_date,
             # 'payments': [payment.to_dict(for_api=for_api) for payment in self.payments]
