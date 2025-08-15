@@ -301,14 +301,18 @@ class ChurchService:
 
             # Check for duplicate church name in the same camp
             existing_church = Church.query.filter_by(
-                name=church_data["name"].strip(), camp_id=church_data["camp_id"]
+                name=church_data["name"].strip(), camp_id=church_data["camp_id"],
+                area=church_data["area"].strip() if "area" in church_data else None,
+                district=church_data["district"].strip() if "district" in church_data else None,
             ).first()
 
             if existing_church:
-                raise ValueError("A church with this name already exists in this camp")
+                return existing_church
 
             new_church = Church(
-                name=church_data["name"].strip(), camp_id=church_data["camp_id"]
+                name=church_data["name"].strip(), camp_id=church_data["camp_id"],
+                area=church_data["area"].strip() if "area" in church_data else None,
+                district=church_data["district"].strip() if "district" in church_data else None,
             )
 
             db.session.add(new_church)

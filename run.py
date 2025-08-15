@@ -175,8 +175,7 @@ def seed_db():
             base_fee=Decimal('250.00'),
             capacity=100,
             description='Annual summer camp for youth',
-            registration_deadline=datetime.now() + timedelta(days=20),
-            camp_manager_id=manager.id
+            registration_deadline=datetime.now() + timedelta(days=20)
         )
         db.session.add(camp)
         db.session.commit()
