@@ -117,7 +117,8 @@ class UserService:
             if 'camp_id' in user_data:
                 new_camp_worker = CampWorker(
                     user_id=new_user.id,
-                    camp_id=user_data['camp_id']
+                    camp_id=user_data['camp_id'],
+                    role=user_data.get('role', 'volunteer')
                 )
                 db.session.add(new_camp_worker)
                 db.session.commit()
