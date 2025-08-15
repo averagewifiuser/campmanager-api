@@ -16,6 +16,7 @@ from .schemas import (
     ChurchUpdateRequestSchema,
     ChurchResponseWrapperSchema,
     ChurchListResponseWrapperSchema,
+    ChurchCreateMultipleRequestSchema,
     
     # Category schemas
     CategoryCreateRequestSchema,
@@ -1045,6 +1046,47 @@ def create_church(camp_id, json_data):
             'data': {
                 'code': 'CREATE_CHURCH_ERROR',
                 'message': 'Failed to create church',
+                'details': {'error': str(e)}
+            }
+        }, 500
+        
+
+@camp_bp.post('/<camp_id>/multiple-churches')
+@camp_bp.input(ChurchCreateMultipleRequestSchema)
+@camp_bp.output(ChurchResponseWrapperSchema, status_code=201)
+@camp_bp.doc(
+    summary='Add churches to camp',
+    description='Add multiple churches to a camp'
+)
+@token_required
+@camp_owner_required()
+def create_churches(camp_id, json_data):
+    """Add churches to camp"""
+    try:
+        
+        church_data = json_data['data']
+        church_data['camp_id'] = camp_id
+        
+        new_church = church_service.create_churches(church_data)
+        
+        return {
+            'data': [church.to_dict() for church in new_church]
+        }, 201
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Create churches error: {str(e)}")
+        return {
+            'data': {
+                'code': 'CREATE_CHURCHES_ERROR',
+                'message': 'Failed to create churches',
                 'details': {'error': str(e)}
             }
         }, 500

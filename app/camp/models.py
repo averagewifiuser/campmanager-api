@@ -18,8 +18,7 @@ class Camp(BaseModel):
     description = db.Column(Text)
     registration_deadline = db.Column(db.DateTime, nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False, server_default='1')
-    camp_manager_id = db.Column(String(36), db.ForeignKey('users.id'), nullable=False)
-    
+        
     # Relationships
     churches = db.relationship('Church', backref='camp', lazy=True, cascade='all, delete-orphan')
     categories = db.relationship('Category', backref='camp', lazy=True, cascade='all, delete-orphan')
@@ -45,7 +44,6 @@ class Camp(BaseModel):
             'description': self.description,
             'registration_deadline': self.registration_deadline,
             'is_active': self.is_active,
-            'camp_manager_id': self.camp_manager_id,
             'churches': [church.to_dict(for_api=for_api) for church in self.churches],
             'categories': [category.to_dict(for_api=for_api) for category in self.categories],
             'custom_fields': [custom_field.to_dict(for_api=for_api) for custom_field in self.custom_fields],
@@ -54,20 +52,51 @@ class Camp(BaseModel):
         }
 
 
+class CampWorker(BaseModel):
+    """Camp worker model"""
+    __tablename__ = 'camp_workers'
+    
+    user_id = db.Column(String(36), db.ForeignKey('users.id'), nullable=False)
+    camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
+    role = db.Column(db.Enum('camp_manager', 'volunteer', name='user_roles'), nullable=False)
+    
+    # Relationships
+    user = db.relationship('User', backref='camp_workers', lazy=True)
+    camp = db.relationship('Camp', backref='camp_workers', lazy=True)
+
+    def to_dict(self, for_api=False):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'camp_id': self.camp_id,
+            'role': self.role,
+            'user': self.user.to_dict(for_api=for_api),
+            'camp': self.camp.to_dict(for_api=for_api)
+        }
+
+
 class Church(BaseModel):
     """Church model"""
     __tablename__ = 'churches'
     
     name = db.Column(db.String(255), nullable=False)
+    district = db.Column(db.String(255), nullable=True)
+    area = db.Column(db.String(255), nullable=True)
     camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
     
     # Relationships
     registrations = db.relationship('Registration', backref='church', lazy=True)
 
+    __table_args__ = (
+        db.UniqueConstraint('name', 'district', 'area', 'camp_id', name='church_name_district_area_camp_id_unique'),
+    )
+
     def to_dict(self, for_api=False):
         return {
             'id': self.id,
             'name': self.name,
+            'district': self.district,
+            'area': self.area,
             'camp_id': self.camp_id,
             'registrations': [registration.to_dict(for_api=for_api) for registration in self.registrations]
         }

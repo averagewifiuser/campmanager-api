@@ -4,6 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from flask_bcrypt import generate_password_hash, check_password_hash
 
 from .models import User, db
+from app.camp.models import CampWorker
 
 
 class UserService:
@@ -64,6 +65,7 @@ class UserService:
                 - password: Plain text password
                 - full_name: User's full name
                 - role: User role (optional, defaults to 'camp_manager')
+                - camp_id: ID of the camp the user is associated with (optional)
                 
         Returns:
             Created User object if successful, None otherwise
@@ -111,6 +113,14 @@ class UserService:
             # Save to database
             db.session.add(new_user)
             db.session.commit()
+
+            if 'camp_id' in user_data:
+                new_camp_worker = CampWorker(
+                    user_id=new_user.id,
+                    camp_id=user_data['camp_id']
+                )
+                db.session.add(new_camp_worker)
+                db.session.commit()
             
             current_app.logger.info(f"New user created: {email}")
             return new_user

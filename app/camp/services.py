@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from .models import (
     Camp,
+    CampWorker,
     Church,
     Category,
     CustomField,
@@ -29,11 +30,10 @@ class CampService:
     def get_user_camps(self, user_id: str) -> List[Camp]:
         """Get all camps for a specific user"""
         try:
-            return (
-                Camp.query.filter_by(camp_manager_id=user_id)
-                .order_by(Camp.created_at.desc())
-                .all()
-            )
+            camp_ids = CampWorker.query.filter_by(user_id=user_id).all()
+            print(camp_ids)
+            camps = Camp.query.filter(Camp.id.in_([camp.camp_id for camp in camp_ids])).order_by(Camp.created_at.desc()).all()
+            return camps
         except SQLAlchemyError as e:
             current_app.logger.error(f"Database error in get_user_camps: {str(e)}")
             return []
@@ -93,11 +93,18 @@ class CampService:
                 capacity=int(camp_data["capacity"]),
                 description=camp_data.get("description", "").strip(),
                 registration_deadline=registration_deadline,
-                camp_manager_id=camp_data["camp_manager_id"],
                 is_active=camp_data.get("is_active", True),
             )
 
             db.session.add(new_camp)
+            db.session.commit()
+
+            camp_worker = CampWorker(
+                user_id=camp_data['camp_manager_id'],
+                camp_id=new_camp.id,
+                role='camp_manager'
+            )
+            db.session.add(camp_worker)
             db.session.commit()
 
             current_app.logger.info(
@@ -322,6 +329,19 @@ class ChurchService:
             db.session.rollback()
             current_app.logger.error(f"Unexpected error in create_church: {str(e)}")
             raise Exception("Failed to create church")
+
+    def create_churches(self, church_data: List[Dict[str, Any]]) -> List[Church]:
+        """Create multiple churches"""
+        try:
+            churches = []
+            for church in church_data:
+                new_church = self.create_church(church)
+                churches.append(new_church)
+            return churches
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in create_churches: {str(e)}")
+            raise Exception("Failed to create churches due to database error")
 
     def update_church(
         self, church_id: str, update_data: Dict[str, Any]

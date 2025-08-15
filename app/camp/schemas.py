@@ -53,7 +53,6 @@ class CampResponseSchema(BaseResponseSchema):
     description = fields.String()
     registration_deadline = fields.DateTime()
     is_active = fields.Boolean()
-    camp_manager_id = fields.String()
 
 
 class CampStatsSchema(Schema):
@@ -72,16 +71,22 @@ class CampStatsSchema(Schema):
 class ChurchCreateSchema(Schema):
     """Schema for creating a church"""
     name = fields.String(required=True, validate=validate.Length(min=2, max=255))
+    district = fields.String(validate=validate.Length(min=2, max=255))
+    area = fields.String(validate=validate.Length(min=2, max=255))
 
 
 class ChurchUpdateSchema(Schema):
     """Schema for updating a church"""
     name = fields.String(validate=validate.Length(min=2, max=255))
+    district = fields.String(validate=validate.Length(min=2, max=255))
+    area = fields.String(validate=validate.Length(min=2, max=255))
 
 
 class ChurchResponseSchema(BaseResponseSchema):
     """Schema for church response"""
     name = fields.String()
+    district = fields.String()
+    area = fields.String()
     camp_id = fields.String()
 
 
@@ -420,7 +425,6 @@ class CampResponseSchema(BaseResponseSchema):
     description = fields.String()
     registration_deadline = fields.DateTime()
     is_active = fields.Boolean()
-    camp_manager_id = fields.String()
 
 
 class CampStatsSchema(Schema):
@@ -439,16 +443,22 @@ class CampStatsSchema(Schema):
 class ChurchCreateSchema(Schema):
     """Schema for creating a church"""
     name = fields.String(required=True, validate=validate.Length(min=2, max=255))
+    district = fields.String(validate=validate.Length(min=2, max=255))
+    area = fields.String(validate=validate.Length(min=2, max=255))
 
 
 class ChurchUpdateSchema(Schema):
     """Schema for updating a church"""
     name = fields.String(validate=validate.Length(min=2, max=255))
+    district = fields.String(validate=validate.Length(min=2, max=255))
+    area = fields.String(validate=validate.Length(min=2, max=255))
 
 
 class ChurchResponseSchema(BaseResponseSchema):
     """Schema for church response"""
     name = fields.String()
+    district = fields.String()
+    area = fields.String()
     camp_id = fields.String()
 
 
@@ -689,6 +699,11 @@ class CampUpdateRequestSchema(Schema):
 class ChurchCreateRequestSchema(Schema):
     """Wrapper for church creation request"""
     data = fields.Nested(ChurchCreateSchema, required=True)
+
+
+class ChurchCreateMultipleRequestSchema(Schema):
+    """Wrapper for multiple church creation request"""
+    data = fields.List(fields.Nested(ChurchCreateSchema, required=True))
 
 
 class ChurchUpdateRequestSchema(Schema):

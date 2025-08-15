@@ -10,6 +10,7 @@ class UserRegistrationSchema(Schema):
     password = fields.String(required=True, validate=validate.Length(min=8))
     full_name = fields.String(required=True, validate=validate.Length(min=2))
     role = fields.String(validate=validate.OneOf(['camp_manager', 'volunteer']))
+    camp_id = fields.String(required=False, allow_none=True)
 
 
 class UserLoginSchema(Schema):

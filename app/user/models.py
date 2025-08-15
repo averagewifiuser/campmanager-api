@@ -13,7 +13,6 @@ class User(BaseModel):
                     default='camp_manager', nullable=False)
     
     # Relationships
-    camps = db.relationship('Camp', backref='manager', lazy=True, cascade='all, delete-orphan')
     # expenses = db.relationship('Expense', backref='manager', lazy=True)
     registration_links = db.relationship('RegistrationLink', backref='manager', lazy=True)
     

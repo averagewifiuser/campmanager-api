@@ -140,10 +140,12 @@ def camp_owner_required(camp_id_param: str = 'camp_id') -> Callable:
                     raise ValidationError("Invalid camp ID format")
                 
                 # Import here to avoid circular imports
-                from ..camp.models import Camp
+                from ..camp.models import Camp, CampWorker
                 
                 # Check if camp exists and user owns it
                 camp = Camp.query.filter_by(id=camp_id).first()
+                camp_workers = CampWorker.query.filter_by(camp_id=camp_id).all()
+                camp_workers_ids = [camp_worker.user_id for camp_worker in camp_workers]
                 if not camp:
                     return {
                         'data': {
@@ -154,10 +156,10 @@ def camp_owner_required(camp_id_param: str = 'camp_id') -> Callable:
                     }, 404
                 
                 # Check ownership
-                if str(camp.camp_manager_id) != str(g.current_user.id):
+                if str(g.current_user.id) not in camp_workers_ids:
                     current_app.logger.warning(
                         f"Access denied: User {g.current_user.email} tried to access "
-                        f"camp {camp_id} owned by {camp.camp_manager_id}"
+                        f"camp {camp_id}"
                     )
                     raise AuthorizationError("You can only access your own camps")
                 
