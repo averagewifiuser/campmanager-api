@@ -113,8 +113,8 @@ def create_app(config_name=None):
 
     # Run DB migrations at startup
     with app.app_context():
-        # upgrade()
-        pass
+        upgrade()
+        
 
     return app
 
