@@ -307,6 +307,10 @@ class ChurchService:
             ).first()
 
             if existing_church:
+                existing_church.name = church_data["name"].strip() if "name" in church_data else existing_church.name
+                existing_church.area = church_data["area"].strip() if "area" in church_data else existing_church.area
+                existing_church.district = church_data["district"].strip() if "district" in church_data else existing_church.district
+                db.session.commit()
                 return existing_church
 
             new_church = Church(
