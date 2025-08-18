@@ -17,7 +17,7 @@ def upgrade():
     sex_enum.create(op.get_bind(), checkfirst=True)
 
     with op.batch_alter_table('registrations', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('sex', sex_enum, nullable=False))
+        batch_op.add_column(sa.Column('sex', sex_enum, nullable=False, server_default='other'))
 
 
 def downgrade():
