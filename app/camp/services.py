@@ -882,6 +882,7 @@ class RegistrationLinkService:
                 expires_at=expires_at,
                 usage_limit=link_data.get("usage_limit"),
                 is_active=link_data.get("is_active", True),
+                form_description=link_data.get("form_description"),
             )
 
             db.session.add(new_link)
@@ -945,6 +946,7 @@ class RegistrationLinkService:
                 "expires_at",
                 "usage_limit",
                 "is_active",
+                "form_description"
             ]
             for field in updatable_fields:
                 if field in update_data:
@@ -1243,7 +1245,8 @@ class RegistrationService:
                 registration_link_id=(
                     registration_link.id if registration_link else None
                 ),
-                camper_code=camper_code
+                camper_code=camper_code,
+                sex=registration_data["sex"],
             )
 
             db.session.add(new_registration)

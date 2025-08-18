@@ -164,6 +164,7 @@ class RegistrationLinkCreateSchema(Schema):
     allowed_categories = fields.List(fields.String(), required=True, validate=validate.Length(min=1))
     expires_at = fields.DateTime(allow_none=True)
     usage_limit = fields.Integer(validate=validate.Range(min=1), allow_none=True)
+    form_description = fields.String(allow_none=True)
     
     # @validates('expires_at')
     # def validate_expires_at(self, value):
@@ -178,6 +179,7 @@ class RegistrationLinkUpdateSchema(Schema):
     expires_at = fields.DateTime(allow_none=True)
     usage_limit = fields.Integer(validate=validate.Range(min=1), allow_none=True)
     is_active = fields.Boolean()
+    form_description = fields.String(allow_none=True)
 
 
 class RegistrationLinkResponseSchema(BaseResponseSchema):
@@ -192,6 +194,7 @@ class RegistrationLinkResponseSchema(BaseResponseSchema):
     usage_count = fields.Integer()
     created_by = fields.String()
     registration_url = fields.Method('get_registration_url')
+    form_description = fields.String(allow_none=True)
     
     def get_registration_url(self, obj):
         # You'll need to configure this base URL
@@ -205,6 +208,7 @@ class RegistrationCreateSchema(Schema):
     middle_name = fields.String(validate=validate.Length(max=255))
     last_name = fields.String(required=True, validate=validate.Length(min=1, max=255))
     age = fields.Integer(required=True, validate=validate.Range(min=1, max=150))
+    sex = fields.String(required=True, validate=validate.OneOf(['male', 'female', 'other']))
     email = fields.Email(allow_none=True)
     phone_number = fields.String(required=True)
     emergency_contact_name = fields.String(required=True, validate=validate.Length(min=2, max=255))
@@ -231,6 +235,7 @@ class RegistrationUpdateSchema(Schema):
     middle_name = fields.String(validate=validate.Length(max=255))
     last_name = fields.String(validate=validate.Length(min=1, max=255))
     age = fields.Integer(validate=validate.Range(min=1, max=150))
+    sex = fields.String(validate=validate.OneOf(['male', 'female', 'other']))
     email = fields.Email(allow_none=True)
     phone_number = fields.String()
     emergency_contact_name = fields.String(validate=validate.Length(min=2, max=255))
@@ -536,6 +541,8 @@ class RegistrationLinkCreateSchema(Schema):
     allowed_categories = fields.List(fields.String(), required=True, validate=validate.Length(min=1))
     expires_at = fields.DateTime(allow_none=True)
     usage_limit = fields.Integer(validate=validate.Range(min=1), allow_none=True)
+    form_description = fields.String(allow_none=True)
+    
     
     # @validates('expires_at')
     # def validate_expires_at(self, value):
@@ -550,6 +557,7 @@ class RegistrationLinkUpdateSchema(Schema):
     expires_at = fields.DateTime(allow_none=True)
     usage_limit = fields.Integer(validate=validate.Range(min=1), allow_none=True)
     is_active = fields.Boolean()
+    form_description = fields.String(allow_none=True)
 
 
 class RegistrationLinkResponseSchema(BaseResponseSchema):
@@ -564,6 +572,7 @@ class RegistrationLinkResponseSchema(BaseResponseSchema):
     usage_count = fields.Integer()
     created_by = fields.String()
     registration_url = fields.Method('get_registration_url')
+    form_description = fields.String(allow_none=True)
     
     def get_registration_url(self, obj):
         # You'll need to configure this base URL
@@ -577,6 +586,7 @@ class RegistrationCreateSchema(Schema):
     middle_name = fields.String(validate=validate.Length(max=255))
     last_name = fields.String(required=True, validate=validate.Length(min=1, max=255))
     age = fields.Integer(required=True, validate=validate.Range(min=1, max=150))
+    sex = fields.String(required=True, validate=validate.OneOf(['male', 'female', 'other']))
     email = fields.Email(allow_none=True)
     phone_number = fields.String(required=True)
     emergency_contact_name = fields.String(required=True, validate=validate.Length(min=2, max=255))
@@ -603,6 +613,7 @@ class RegistrationUpdateSchema(Schema):
     middle_name = fields.String(validate=validate.Length(max=255))
     last_name = fields.String(validate=validate.Length(min=1, max=255))
     age = fields.Integer(validate=validate.Range(min=1, max=150))
+    sex = fields.String(validate=validate.OneOf(['male', 'female', 'other']))
     email = fields.Email(allow_none=True)
     phone_number = fields.String()
     emergency_contact_name = fields.String(validate=validate.Length(min=2, max=255))
@@ -620,6 +631,7 @@ class RegistrationResponseSchema(BaseResponseSchema):
     middle_name = fields.String()
     last_name = fields.String()
     age = fields.Integer()
+    sex = fields.String()
     email = fields.String(allow_none=True)
     phone_number = fields.String()
     emergency_contact_name = fields.String()

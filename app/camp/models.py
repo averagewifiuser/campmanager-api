@@ -157,6 +157,7 @@ class RegistrationLink(BaseModel):
     camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
     link_token = db.Column(db.String(255), unique=True, nullable=False)
     name = db.Column(db.String(255), nullable=False)
+    form_description = db.Column(db.Text, nullable=True, default=None)
     allowed_categories = db.Column(JSON)  # Array of category UUIDs
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     expires_at = db.Column(db.DateTime)
@@ -196,6 +197,7 @@ class RegistrationLink(BaseModel):
             'camp_id': self.camp_id,
             'link_token': self.link_token,
             'name': self.name,
+            'form_description': self.form_description,
             'allowed_categories': self.allowed_categories,
             'is_active': self.is_active,
             'expires_at': self.expires_at,
@@ -214,6 +216,7 @@ class Registration(BaseModel):
     middle_name = db.Column(db.String(255), default='')
     last_name = db.Column(db.String(255), nullable=False)
     age = db.Column(db.Integer, nullable=False)
+    sex = db.Column(db.Enum('male', 'female', 'other', name='sex'), nullable=False, default='other')
     email = db.Column(db.String(255))  # Optional
     phone_number = db.Column(db.String(20), nullable=False)
     emergency_contact_name = db.Column(db.String(255), nullable=False)
@@ -271,6 +274,7 @@ class Registration(BaseModel):
             'has_checked_in': self.has_checked_in,
             'camp_id': self.camp_id,
             'camper_code': self.camper_code,
+            'sex': self.sex,
             'registration_link_id': self.registration_link_id,
             'registration_date': self.registration_date,
             # 'payments': [payment.to_dict(for_api=for_api) for payment in self.payments]
