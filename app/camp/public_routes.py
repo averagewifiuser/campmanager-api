@@ -53,7 +53,6 @@ def get_registration_form_by_token(link_token):
                 }
             }, 410  # Gone
         
-        print(link)
         # Get form data using the link token
         form_data = registration_service.get_registration_form(str(link.camp_id), link_token)
         if not form_data:

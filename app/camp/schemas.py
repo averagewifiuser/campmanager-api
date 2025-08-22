@@ -663,6 +663,31 @@ class RegistrationFormSchema(Schema):
     registration_link = fields.Nested(RegistrationLinkResponseSchema, allow_none=True)
 
 
+
+# Payment Form Schemas
+class PaymentFormSchema(Schema):
+    """Schema for payment form data"""
+    amount = fields.Decimal(required=True)
+    payment_channel = fields.String(required=True, validate=validate.OneOf(['momo', 'cash', 'cheque', 'bank_transfer', 'card']))
+    # payment_reference = fields.String()
+    payment_metadata = fields.Dict()
+    registration_ids = fields.List(fields.String(), required=True)
+
+
+class PaymentFormRequestWrapperSchema(Schema):
+    """Wrapper for payment form request"""
+    data = fields.Nested(PaymentFormSchema, required=True)
+
+
+class PaymentResponseSchema(BaseResponseSchema):
+    amount = fields.Decimal(required=True)
+    payment_channel = fields.String(required=True)
+    payment_reference = fields.String()
+    payment_metadata = fields.Dict()
+    registrations = fields.List(fields.Dict())
+    payment_date = fields.DateTime()
+    recorded_by = fields.String()
+
 # Error Schema
 class ErrorSchema(Schema):
     """Schema for error responses"""
@@ -763,6 +788,10 @@ class RegistrationUpdateRequestSchema(Schema):
     data = fields.Nested(RegistrationUpdateSchema, required=True)
 
 
+class PaymentCreateRequestSchema(Schema):
+    """Wrapper for payment creation request"""
+    data = fields.Nested(PaymentFormSchema, required=True)
+
 # Specific Response Wrappers
 class UserResponseWrapperSchema(Schema):
     """Wrapper for user response"""
@@ -839,3 +868,19 @@ class RegistrationListResponseWrapperSchema(Schema):
     """Wrapper for registration list response"""
     data = fields.List(fields.Nested(RegistrationResponseSchema), required=True)
 
+
+class PaymentListResponseWrapperSchema(Schema):
+    """Wrapper for payment response"""
+    data = fields.List(fields.Nested(PaymentResponseSchema), required=True)
+
+class PaymentResponseWrapperSchema(Schema):
+    """Wrapper for payment response"""
+    data = fields.Nested(PaymentResponseSchema, required=True)
+
+
+class CheckedInRequestSchema(Schema):
+    has_checked_in = fields.Boolean(required=True)
+
+
+class CheckedInRequestWrapperSchema(Schema):
+    data = fields.Nested(CheckedInRequestSchema, required=True)

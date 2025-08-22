@@ -3,6 +3,7 @@ from flask import current_app
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime, timezone
 from decimal import Decimal
+from app.user.models import User
 
 from .models import (
     Camp,
@@ -12,6 +13,7 @@ from .models import (
     CustomField,
     RegistrationLink,
     Registration,
+    Payment,
     db,
 )
 
@@ -249,9 +251,9 @@ class CampService:
                 (total_registrations / camp.capacity * 100) if camp.capacity > 0 else 0
             )
 
-            # Calculate revenue
+            payments = Payment.query.filter_by(camp_id=camp_id).all()
             total_revenue = sum(
-                float(reg.total_amount) for reg in camp.registrations if reg.has_paid
+                float(payment.amount) for payment in payments
             )
 
             return {
@@ -1509,3 +1511,118 @@ class RegistrationService:
                 f"Unexpected error in update_checkin_status: {str(e)}"
             )
             raise Exception("Failed to update check-in status")
+
+
+class PaymentService:
+    """Service class for payment-related business logic"""
+
+    def get_payments_by_camp(self, camp_id: str) -> List[Payment]:
+        """Get all payments for a specific camp"""
+        try:
+            payments = Payment.query.filter_by(camp_id=camp_id).all()
+            for payment in payments:
+                payment.recorded_by = User.query.get(payment.recorded_by).full_name
+
+            return payments
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in get_payments_by_camp: {str(e)}")
+            raise Exception("Failed to get payments due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in get_payments_by_camp: {str(e)}")
+            raise Exception("Failed to get payments")
+
+    def get_payment_by_id(self, payment_id: str) -> Optional[Payment]:
+        """Get a specific payment by ID"""
+        try:
+            payment = Payment.query.get(payment_id)
+            return payment
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in get_payment_by_id: {str(e)}")
+            raise Exception("Failed to get payment due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in get_payment_by_id: {str(e)}")
+            raise Exception("Failed to get payment")
+
+    def update_payment(self, payment_id: str, payment_data: Dict[str, Any]) -> Optional[Payment]:
+        """Update a specific payment by ID"""
+        try:
+            payment = Payment.query.get(payment_id)
+            if not payment:
+                return None
+            
+            # Update payment fields
+            for field in payment_data:
+                setattr(payment, field, payment_data[field])
+            
+            db.session.commit()
+            
+            return payment
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in update_payment: {str(e)}")
+            raise Exception("Failed to update payment due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in update_payment: {str(e)}")
+            raise Exception("Failed to update payment")
+    
+    def create_payment(self, payment_data: Dict[str, Any]) -> Optional[Payment]:
+        """Create a new payment"""
+        try:
+            # Validate required fields
+            required_fields = [
+                "amount",
+                "payment_channel",
+                "recorded_by",
+                "registration_ids",
+                "payment_metadata",
+            ]
+            for field in required_fields:
+                if field not in payment_data:
+                    raise ValueError(f"Missing required field: {field}")
+
+            
+            amount_per_registration = payment_data["amount"] / len(payment_data["registration_ids"])
+
+            payments_number = Payment.query.filter_by(camp_id=payment_data["camp_id"]).count()
+            
+            payment = Payment(
+                camp_id=payment_data["camp_id"],
+                amount=amount_per_registration,
+                payment_channel=payment_data["payment_channel"],
+                recorded_by=payment_data["recorded_by"],
+                payment_reference=self.generate_payment_reference(payments_number),
+                payment_metadata=payment_data["payment_metadata"],
+            )
+            db.session.add(payment)
+
+            # Add registrations to payment
+            for registration_id in payment_data["registration_ids"]:
+                registration = Registration.query.get(registration_id)
+                if registration:
+                    payment.registrations.append(registration)
+                    registration.has_paid = registration.is_fully_paid()
+            
+            db.session.commit()
+            
+            return payment
+        except ValueError as e:
+            raise Exception("Failed to create payment due to validation error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in create_payment: {str(e)}")
+            raise Exception("Failed to create payment due to database error")
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in create_payment: {str(e)}")
+            raise Exception("Failed to create payment due to database error")
+
+    
+    def generate_payment_reference(self, payments_number: int) -> str:
+        """Generate a random payment reference"""
+        payments_number += 1
+        return f"{payments_number:05d}"

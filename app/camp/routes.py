@@ -2,7 +2,7 @@ from flask import request, current_app
 from apiflask import APIBlueprint
 from flask_jwt_extended import jwt_required
 
-from .models import Camp, Church, Category, CustomField, RegistrationLink, Registration
+from .models import Camp, Church, Category, CustomField, RegistrationLink, Registration, Payment
 from .schemas import (
     # Camp schemas
     CampCreateRequestSchema,
@@ -42,9 +42,17 @@ from .schemas import (
     RegistrationResponseWrapperSchema,
     RegistrationListResponseWrapperSchema,
     RegistrationFormResponseWrapperSchema,
+
+    # Payment Schemas
+    PaymentCreateRequestSchema,
+    PaymentListResponseWrapperSchema,
+    PaymentResponseWrapperSchema,
+    
+    # Check-in Schemas
+    CheckedInRequestWrapperSchema,
 )
 from app._shared.schemas import SuccessMessageWrapperSchema
-from .services import CampService, ChurchService, CategoryService, CustomFieldService, RegistrationLinkService, RegistrationService
+from .services import CampService, ChurchService, CategoryService, CustomFieldService, RegistrationLinkService, RegistrationService, PaymentService
 from .._shared.auth import token_required, role_required, camp_owner_required, optional_auth, get_current_user
 
 
@@ -58,7 +66,7 @@ category_service = CategoryService()
 custom_field_service = CustomFieldService()
 registration_link_service = RegistrationLinkService()
 registration_service = RegistrationService()
-
+payment_service = PaymentService()
 
 # =============================================================================
 # CAMP ROUTES
@@ -420,19 +428,7 @@ def update_payment_status(registration_id, json_data):
 
 
 @camp_bp.patch('/registrations/<registration_id>/checkin')
-@camp_bp.input({
-    'type': 'object',
-    'properties': {
-        'data': {
-            'type': 'object',
-            'properties': {
-                'has_checked_in': {'type': 'boolean'}
-            },
-            'required': ['has_checked_in']
-        }
-    },
-    'required': ['data']
-})
+@camp_bp.input(CheckedInRequestWrapperSchema)
 @camp_bp.output(RegistrationResponseWrapperSchema)
 @camp_bp.doc(
     summary='Update check-in status',
@@ -1613,6 +1609,70 @@ def get_registrations(camp_id):
         }, 500
 
 
+# =============================================================================
+# PAYMENT ROUTES
+# =============================================================================
+
+@camp_bp.get('/<camp_id>/payments')
+@camp_bp.output(PaymentListResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get camp payments',
+    description='Get all payments for a camp (Manager only)'
+)
+@token_required
+# @camp_owner_required()
+def get_payments(camp_id):
+    """Get all payments for camp"""
+    try:
+        payments = payment_service.get_payments_by_camp(camp_id)
+        
+        return {
+            'data': [pay.to_dict() for pay in payments]
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get payments error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_PAYMENTS_ERROR',
+                'message': 'Failed to retrieve payments',
+                'details': {'error': str(e)}
+            }
+        }, 500
+    
+@camp_bp.post('/<camp_id>/payments')
+@camp_bp.input(PaymentCreateRequestSchema)
+@camp_bp.output(PaymentResponseWrapperSchema, status_code=201)
+@camp_bp.doc(
+    summary='Create payment',
+    description='Create a new payment for a camp'
+)
+@token_required
+# @camp_owner_required()
+def create_payment(camp_id, json_data):
+    """Create payment"""
+    try:
+        payment_data = json_data['data']
+        payment_data['camp_id'] = camp_id
+        payment_data['recorded_by'] = str(get_current_user().id)
+        
+        new_payment = payment_service.create_payment(payment_data)
+        
+        return {
+            'data': new_payment.to_dict()
+        }, 201
+        
+    except Exception as e:
+        current_app.logger.error(f"Create payment error: {str(e)}")
+        return {
+            'data': {
+                'code': 'CREATE_PAYMENT_ERROR',
+                'message': 'Failed to create payment',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
 # Error handlers for the camp blueprint
 @camp_bp.errorhandler(400)
 def bad_request(error):
@@ -1649,3 +1709,4 @@ def internal_error(error):
             'details': None
         }
     }, 500
+

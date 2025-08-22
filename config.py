@@ -182,6 +182,9 @@ class ProductionConfig(Config):
     
     # Production CORS (specific origins)
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '').split(',')
+    CORS_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH']
+    CORS_ALLOW_HEADERS = ['Content-Type', 'Authorization']
+    CORS_AUTOMATIC_OPTIONS = True
     
     # Production logging
     LOG_LEVEL = 'DEBUG'

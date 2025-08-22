@@ -4,6 +4,12 @@ from sqlalchemy import Text, JSON, String
 from app.extensions import db
 from app._shared.models import BaseModel
 
+registration_payments = db.Table('registration_payments',
+    db.Column('registration_id', String(36), db.ForeignKey('registrations.id'), primary_key=True),
+    db.Column('payment_id', String(36), db.ForeignKey('payments.id'), primary_key=True),
+    db.Column('created_at', db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+)
+
 
 class Camp(BaseModel):
     """Camp model"""
@@ -214,7 +220,7 @@ class Registration(BaseModel):
     
     surname = db.Column(db.String(255), nullable=False)
     middle_name = db.Column(db.String(255), default='')
-    last_name = db.Column(db.String(255), nullable=False)
+    last_name = db.Column(db.String(255), nullable=False) 
     age = db.Column(db.Integer, nullable=False)
     sex = db.Column(db.Enum('male', 'female', 'other', name='sex'), nullable=False, default='other')
     email = db.Column(db.String(255))  # Optional
@@ -233,7 +239,12 @@ class Registration(BaseModel):
     registration_date = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     
     # Relationships
-    # payments = db.relationship('Payment', backref='registration', lazy=True, cascade='all, delete-orphan')
+    payments = db.relationship(
+        'Payment',
+        secondary=registration_payments,
+        back_populates='registrations',
+        lazy='dynamic'
+    )
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -255,8 +266,20 @@ class Registration(BaseModel):
         
         return base_fee
 
-    def to_dict(self, for_api=False):
-        return {
+    def get_total_payments(self):
+        """Calculate total amount paid by this registration"""
+        return sum(float(payment.amount) for payment in self.payments)
+    
+    def get_outstanding_balance(self):
+        """Calculate outstanding balance for this registration"""
+        return float(self.total_amount) - self.get_total_payments()
+    
+    def is_fully_paid(self):
+        """Check if registration is fully paid"""
+        return self.get_outstanding_balance() <= 0
+
+    def to_dict(self, for_api=False, include_payments=False):
+        result = {
             'id': self.id,
             'surname': self.surname,
             'middle_name': self.middle_name,
@@ -277,5 +300,71 @@ class Registration(BaseModel):
             'sex': self.sex,
             'registration_link_id': self.registration_link_id,
             'registration_date': self.registration_date,
-            # 'payments': [payment.to_dict(for_api=for_api) for payment in self.payments]
         }
+        if include_payments:
+            result['total_payments'] = self.get_total_payments()
+            result['outstanding_balance'] = self.get_outstanding_balance()
+            result['is_fully_paid'] = self.is_fully_paid()
+            result['payments'] = [payment.to_dict(for_api=False) for payment in self.payments]
+        return result
+
+
+class Payment(BaseModel):
+    """Payment model"""
+    __tablename__ = 'payments'
+    
+    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    payment_date = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    payment_channel = db.Column(
+        db.Enum('momo', 'cash', 'cheque', 'bank_transfer', 'card', name='payment_channel'), 
+        nullable=False
+    )
+    recorded_by = db.Column(String(36), db.ForeignKey('users.id'), nullable=False)
+    payment_reference = db.Column(db.String(100), nullable=True)
+    payment_metadata = db.Column(JSON, nullable=True)
+    camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
+    
+    # Relationships
+    registrations = db.relationship(
+        'Registration',
+        secondary=registration_payments,
+        back_populates='payments',
+        lazy='dynamic'
+    )
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if self.payment_date is None:
+            self.payment_date = datetime.now(timezone.utc)
+    
+    def to_dict(self, for_api=True):
+        result = {
+            'id': self.id,
+            'amount': float(self.amount) if self.amount else 0,
+            'payment_date': self.payment_date,
+            'payment_channel': self.payment_channel,
+            'recorded_by': self.recorded_by,
+            'payment_reference': self.payment_reference,
+            'payment_metadata': self.payment_metadata,
+        }
+        
+        if for_api:
+            # Include registration details for API responses
+            result['registrations'] = [
+                {
+                    'id': reg.id,
+                    'camper_name': f"{reg.surname} {reg.last_name}",
+                    'camp_id': reg.camp_id
+                } 
+                for reg in self.registrations
+            ]
+        
+        return result
+    
+    def get_total_allocated_amount(self):
+        """Get total amount allocated to registrations from this payment"""
+        return sum(float(reg.total_amount) for reg in self.registrations)
+    
+    def get_remaining_amount(self):
+        """Get remaining unallocated amount from this payment"""
+        return float(self.amount) - self.get_total_allocated_amount()
