@@ -884,3 +884,9 @@ class CheckedInRequestSchema(Schema):
 
 class CheckedInRequestWrapperSchema(Schema):
     data = fields.Nested(CheckedInRequestSchema, required=True)
+
+
+class RegistrationsQuerySchema(Schema):
+    church_id = fields.String(required=False)
+    category_id = fields.String(required=False)
+    custom_field_responses = fields.Dict(required=False)

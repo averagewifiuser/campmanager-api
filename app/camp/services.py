@@ -1053,14 +1053,18 @@ class RegistrationService:
             )
             return None
 
-    def get_camp_registrations(self, camp_id: str) -> List[Registration]:
+    def get_camp_registrations(self, camp_id: str, **kwargs) -> List[Registration]:
         """Get all registrations for a camp"""
         try:
-            return (
-                Registration.query.filter_by(camp_id=camp_id)
-                .order_by(Registration.registration_date.desc())
-                .all()
-            )
+            registrations = Registration.query.filter_by(camp_id=camp_id)
+            if kwargs.get('checked_in'):
+                registrations = registrations.filter_by(checked_in=True)
+            if kwargs.get('church_id'):
+                registrations = registrations.filter_by(church_id=kwargs['church_id'])
+            if kwargs.get('category_id'):
+                registrations = registrations.filter_by(category_id=kwargs['category_id'])
+            return registrations.order_by(Registration.registration_date.desc()).all()
+
         except SQLAlchemyError as e:
             current_app.logger.error(
                 f"Database error in get_camp_registrations: {str(e)}"

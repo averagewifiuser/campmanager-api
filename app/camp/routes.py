@@ -50,6 +50,7 @@ from .schemas import (
     
     # Check-in Schemas
     CheckedInRequestWrapperSchema,
+    RegistrationsQuerySchema,
 )
 from app._shared.schemas import SuccessMessageWrapperSchema
 from .services import CampService, ChurchService, CategoryService, CustomFieldService, RegistrationLinkService, RegistrationService, PaymentService
@@ -1211,7 +1212,7 @@ def delete_church(church_id):
     description='Get all registration categories for a camp'
 )
 @token_required
-@camp_owner_required()
+# @camp_owner_required()
 def get_categories(camp_id):
     """Get categories for camp"""
     try:
@@ -1408,7 +1409,7 @@ def delete_category(category_id):
     description='Get all custom fields for a camp'
 )
 @token_required
-@camp_owner_required()
+# @camp_owner_required()
 def get_custom_fields(camp_id):
     """Get custom fields for camp"""
     try:
@@ -1582,6 +1583,7 @@ def submit_registration(camp_id, json_data):
 
 
 @camp_bp.get('/<camp_id>/registrations')
+@camp_bp.input(RegistrationsQuerySchema, location='query')
 @camp_bp.output(RegistrationListResponseWrapperSchema)
 @camp_bp.doc(
     summary='Get camp registrations',
@@ -1589,10 +1591,10 @@ def submit_registration(camp_id, json_data):
 )
 @token_required
 @camp_owner_required()
-def get_registrations(camp_id):
+def get_registrations(camp_id, query_data):
     """Get all registrations for camp"""
     try:
-        registrations = registration_service.get_camp_registrations(camp_id)
+        registrations = registration_service.get_camp_registrations(camp_id, **query_data)
         
         return {
             'data': [reg.to_dict() for reg in registrations]
