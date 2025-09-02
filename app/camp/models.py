@@ -97,14 +97,22 @@ class Church(BaseModel):
         db.UniqueConstraint('name', 'district', 'area', 'camp_id', name='church_name_district_area_camp_id_unique'),
     )
 
-    def to_dict(self, for_api=False):
+    def to_dict(self, for_api=False, include_registrations=True):
+        if not include_registrations:
+            return {
+                'id': self.id,
+                'name': self.name,
+                'district': self.district,
+                'area': self.area,
+                'camp_id': self.camp_id,
+            }
         return {
             'id': self.id,
             'name': self.name,
             'district': self.district,
             'area': self.area,
             'camp_id': self.camp_id,
-            'registrations': [registration.to_dict(for_api=for_api) for registration in self.registrations]
+            'registrations': [registration.to_dict(for_api=for_api, include_payments=True) for registration in self.registrations]
         }
 
 
@@ -237,6 +245,8 @@ class Registration(BaseModel):
     camper_code = db.Column(db.String(10), nullable=True, default=None)
     registration_link_id = db.Column(String(36), db.ForeignKey('registration_links.id'))
     registration_date = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    otp_code = db.Column(db.String(6), nullable=True, default=None)
+    otp_requested = db.Column(db.Boolean, default=False, nullable=False)
     
     # Relationships
     payments = db.relationship(

@@ -1,4 +1,4 @@
-from flask import request, current_app
+from flask import request, current_app, render_template
 from apiflask import APIBlueprint
 
 from .models import RegistrationLink
@@ -6,7 +6,8 @@ from app._shared.schemas import ErrorResponseWrapperSchema
 from .schemas import (
     RegistrationCreateRequestSchema,
     RegistrationResponseWrapperSchema,
-    RegistrationFormResponseWrapperSchema
+    RegistrationFormResponseWrapperSchema,
+    OTPRequestWrapperSchema
 )
 from .services import RegistrationService, CampService
 from .._shared.auth import optional_auth
@@ -272,6 +273,111 @@ def check_registration_link(link_token):
             'data': {
                 'code': 'CHECK_LINK_ERROR',
                 'message': 'Failed to check registration link',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@public_bp.post('/otp/request')
+@public_bp.input(OTPRequestWrapperSchema)
+@public_bp.output(RegistrationResponseWrapperSchema, 200)
+@public_bp.doc(
+    summary='Request OTP for camper',
+    description='Request OTP code for a camper using their camper code. OTP will be sent via SMS and email.'
+)
+def request_otp(json_data):
+    """Request OTP for a camper"""
+    try:
+        camper_code = json_data['data']['camper_code'].strip().upper()
+        
+        # Request OTP through service
+        otp_data = registration_service.request_otp(camper_code)
+        
+        # Send OTP via SMS and email
+        camp = camp_service.get_camp_by_id(registration_service.get_registration_by_camper_code(camper_code).camp_id)
+        
+        # SMS message
+        sms_message = f"Your OTP code for {camp.name} is: {otp_data['otp_code']}. This code is valid for verification. Do not share this code."
+        
+        # Email message
+        email_message = render_template('otp-verification.html', otp_data=otp_data, camp=camp)
+        
+        # Send SMS
+        if otp_data['phone_number']:
+            sms.send_sms(otp_data['phone_number'], sms_message)
+        
+        # Send Email
+        if otp_data['email']:
+            mailer.send_email(
+                recipients=[otp_data['email']],
+                subject=f'OTP Verification Code - {camp.name}',
+                text=email_message,
+                html=True,
+            )
+        
+        return {
+            'data': {
+                'message': 'OTP sent successfully via SMS and email',
+                'camper_code': camper_code,
+                'camper_name': otp_data['camper_name']
+            }
+        }, 200
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Request OTP error: {str(e)}")
+        return {
+            'data': {
+                'code': 'OTP_REQUEST_ERROR',
+                'message': 'Failed to request OTP',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@public_bp.post('/otp/verify')
+@public_bp.input(OTPRequestWrapperSchema)
+# @public_bp.output(RegistrationResponseWrapperSchema, 200)
+@public_bp.doc(
+    summary='Verify OTP and get registration data',
+    description='Verify OTP code for a camper and return their registration data including payments'
+)
+def verify_otp(json_data):
+    """Verify OTP and return registration data"""
+    print("I was here")
+    try:
+        camper_code = json_data['data']['camper_code'].strip().upper()
+        otp_code = json_data['data']['otp_code'].strip()
+        
+        # Verify OTP through service
+        registration_data = registration_service.verify_otp(camper_code, otp_code)
+
+        return {
+            'data': registration_data
+        }, 200
+        
+    except ValueError as e:
+        print(f"Value error: {str(e)}")
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        print(f"Verify OTP error: {str(e)}")
+        return {
+            'data': {
+                'code': 'OTP_VERIFY_ERROR',
+                'message': 'Failed to verify OTP',
                 'details': {'error': str(e)}
             }
         }, 500

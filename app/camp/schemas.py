@@ -646,6 +646,10 @@ class RegistrationResponseSchema(BaseResponseSchema):
     registration_link_id = fields.String(allow_none=True)
     registration_date = fields.DateTime()
     camper_code = fields.String()
+    total_payments = fields.Decimal(required=False)
+    outstanding_balance = fields.Decimal(required=False)
+    is_fully_paid = fields.Boolean(required=False)
+    payments = fields.List(fields.Dict(), required=False)
     
     # Nested objects for convenience
     church = fields.Nested(ChurchResponseSchema, dump_only=True)
@@ -890,3 +894,12 @@ class RegistrationsQuerySchema(Schema):
     church_id = fields.String(required=False)
     category_id = fields.String(required=False)
     custom_field_responses = fields.Dict(required=False)
+
+
+class OTPRequest(Schema):
+    camper_code = fields.String(required=True)
+    otp_code = fields.String(required=False)
+
+
+class OTPRequestWrapperSchema(Schema):
+    data = fields.Nested(OTPRequest, required=True)

@@ -3,6 +3,8 @@ from flask import current_app
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime, timezone
 from decimal import Decimal
+import random
+import string
 from app.user.models import User
 
 from .models import (
@@ -1515,6 +1517,108 @@ class RegistrationService:
                 f"Unexpected error in update_checkin_status: {str(e)}"
             )
             raise Exception("Failed to update check-in status")
+
+    def get_registration_by_camper_code(self, camper_code: str) -> Optional[Registration]:
+        """Get registration by camper code"""
+        try:
+            return Registration.query.filter_by(camper_code=camper_code).first()
+        except SQLAlchemyError as e:
+            current_app.logger.error(
+                f"Database error in get_registration_by_camper_code: {str(e)}"
+            )
+            return None
+
+    def generate_otp(self) -> str:
+        """Generate a 6-digit OTP code"""
+        return ''.join(random.choices(string.digits, k=6))
+
+    def request_otp(self, camper_code: str) -> Optional[Dict[str, Any]]:
+        """Request OTP for a camper using their camper code"""
+        try:
+            # Find registration by camper code
+            registration = self.get_registration_by_camper_code(camper_code)
+            if not registration:
+                raise ValueError("Invalid camper code")
+
+            # Generate OTP
+            otp_code = self.generate_otp()
+            
+            # Update registration with OTP
+            registration.otp_code = otp_code
+            registration.otp_requested = True
+            
+            db.session.commit()
+
+            current_app.logger.info(
+                f"OTP requested for camper: {registration.surname} {registration.last_name} ({camper_code})"
+            )
+
+            return {
+                "registration_id": str(registration.id),
+                "camper_code": camper_code,
+                "otp_code": otp_code,
+                "phone_number": registration.phone_number,
+                "email": registration.email,
+                "camper_name": f"{registration.surname} {registration.last_name}"
+            }
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in request_otp: {str(e)}")
+            raise Exception("Failed to request OTP due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in request_otp: {str(e)}")
+            raise Exception("Failed to request OTP")
+
+    def verify_otp(self, camper_code: str, otp_code: str) -> Optional[Dict[str, Any]]:
+        """Verify OTP for a camper and return registration data with payments"""
+        try:
+            # Find registration by camper code
+            registration = self.get_registration_by_camper_code(camper_code)
+            if not registration:
+                raise ValueError("Invalid camper code")
+
+            # Check if OTP was requested
+            if not registration.otp_requested:
+                raise ValueError("OTP not requested for this camper")
+
+            # Verify OTP
+            if registration.otp_code != otp_code:
+                raise ValueError("Invalid OTP code")
+
+            # Clear OTP after successful verification
+            registration.otp_code = None
+            registration.otp_requested = False
+            
+            db.session.commit()
+
+            # Get registration data with payments
+            registration_data = registration.to_dict(for_api=True, include_payments=True)
+            
+            # Add camp information
+            # registration_data['camp'] = registration.camp.to_dict(for_api=True)
+            registration_data['church'] = registration.church.to_dict(for_api=False, include_registrations=False)
+            # registration_data['category'] = registration.category.to_dict(for_api=True)
+
+            current_app.logger.info(
+                f"OTP verified successfully for camper: {registration.surname} {registration.last_name} ({camper_code})"
+            )
+
+            return registration_data
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in verify_otp: {str(e)}")
+            raise Exception("Failed to verify OTP due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in verify_otp: {str(e)}")
+            raise Exception("Failed to verify OTP")
 
 
 class PaymentService:
