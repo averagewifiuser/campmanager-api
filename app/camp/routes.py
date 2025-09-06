@@ -48,12 +48,17 @@ from .schemas import (
     PaymentListResponseWrapperSchema,
     PaymentResponseWrapperSchema,
     
+    # Financial Schemas
+    FinancialRequestWrapperSchema,
+    FinancialListResponseWrapperSchema,
+    FinancialResponseWrapperSchema,
+    
     # Check-in Schemas
     CheckedInRequestWrapperSchema,
     RegistrationsQuerySchema,
 )
 from app._shared.schemas import SuccessMessageWrapperSchema
-from .services import CampService, ChurchService, CategoryService, CustomFieldService, RegistrationLinkService, RegistrationService, PaymentService
+from .services import CampService, ChurchService, CategoryService, CustomFieldService, RegistrationLinkService, RegistrationService, PaymentService, FinancialService
 from .._shared.auth import token_required, role_required, camp_owner_required, optional_auth, get_current_user
 
 
@@ -68,6 +73,7 @@ custom_field_service = CustomFieldService()
 registration_link_service = RegistrationLinkService()
 registration_service = RegistrationService()
 payment_service = PaymentService()
+financial_service = FinancialService()
 
 # =============================================================================
 # CAMP ROUTES
@@ -1675,6 +1681,246 @@ def create_payment(camp_id, json_data):
         }, 500
 
 
+# =============================================================================
+# FINANCIAL ROUTES
+# =============================================================================
+
+@camp_bp.get('/<camp_id>/financials')
+@camp_bp.output(FinancialListResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get camp financials',
+    description='Get all financial records for a camp (Manager only)'
+)
+@token_required
+@camp_owner_required()
+def get_camp_financials(camp_id):
+    """Get all financial records for camp"""
+    try:
+        financials = financial_service.get_financials_by_camp(camp_id)
+        
+        return {
+            'data': [financial.to_dict() for financial in financials]
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get financials error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_FINANCIALS_ERROR',
+                'message': 'Failed to retrieve financial records',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.post('/<camp_id>/financials')
+@camp_bp.input(FinancialRequestWrapperSchema)
+@camp_bp.output(FinancialResponseWrapperSchema, status_code=201)
+@camp_bp.doc(
+    summary='Create financial record',
+    description='Create a new financial record for a camp'
+)
+@token_required
+@camp_owner_required()
+def create_financial(camp_id, json_data):
+    """Create financial record"""
+    try:
+        financial_data = json_data['data']
+        
+        new_financial = financial_service.create_financial(financial_data, camp_id)
+        
+        return {
+            'data': new_financial.to_dict()
+        }, 201
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Create financial error: {str(e)}")
+        return {
+            'data': {
+                'code': 'CREATE_FINANCIAL_ERROR',
+                'message': 'Failed to create financial record',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.get('/financials/<financial_id>')
+@camp_bp.output(FinancialResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get financial record details',
+    description='Get details of a specific financial record'
+)
+@token_required
+def get_financial(financial_id):
+    """Get financial record details"""
+    try:
+        # Verify user owns the camp that owns this financial record
+        financial = financial_service.get_financial_by_id(financial_id)
+        if not financial:
+            return {
+                'data': {
+                    'code': 'FINANCIAL_NOT_FOUND',
+                    'message': 'Financial record not found',
+                    'details': None
+                }
+            }, 404
+        
+        # Check if user owns the camp
+        user = get_current_user()
+        # if str(financial.camp.camp_manager_id) != str(user.id):
+        #     return {
+        #         'data': {
+        #             'code': 'AUTHORIZATION_ERROR',
+        #             'message': 'Access denied',
+        #             'details': None
+        #         }
+        #     }, 403
+        
+        return {
+            'data': financial.to_dict()
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get financial error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_FINANCIAL_ERROR',
+                'message': 'Failed to retrieve financial record',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.put('/financials/<financial_id>')
+@camp_bp.input(FinancialRequestWrapperSchema)
+@camp_bp.output(FinancialResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Update financial record',
+    description='Update financial record details'
+)
+@token_required
+def update_financial(financial_id, json_data):
+    """Update financial record"""
+    try:
+        # Verify user owns the camp that owns this financial record
+        financial = financial_service.get_financial_by_id(financial_id)
+        if not financial:
+            return {
+                'data': {
+                    'code': 'FINANCIAL_NOT_FOUND',
+                    'message': 'Financial record not found',
+                    'details': None
+                }
+            }, 404
+        
+        # Check if user owns the camp
+        user = get_current_user()
+        # if str(financial.camp.camp_manager_id) != str(user.id):
+        #     return {
+        #         'data': {
+        #             'code': 'AUTHORIZATION_ERROR',
+        #             'message': 'Access denied',
+        #             'details': None
+        #         }
+        #     }, 403
+        
+        update_data = json_data['data']
+        updated_financial = financial_service.update_financial(financial_id, update_data)
+        
+        return {
+            'data': updated_financial.to_dict()
+        }, 200
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Update financial error: {str(e)}")
+        return {
+            'data': {
+                'code': 'UPDATE_FINANCIAL_ERROR',
+                'message': 'Failed to update financial record',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.delete('/financials/<financial_id>')
+@camp_bp.output(SuccessMessageWrapperSchema)
+@camp_bp.doc(
+    summary='Delete financial record',
+    description='Delete/soft delete a financial record'
+)
+@token_required
+def delete_financial(financial_id):
+    """Delete financial record"""
+    try:
+        # Verify user owns the camp that owns this financial record
+        financial = financial_service.get_financial_by_id(financial_id)
+        if not financial:
+            return {
+                'data': {
+                    'code': 'FINANCIAL_NOT_FOUND',
+                    'message': 'Financial record not found',
+                    'details': None
+                }
+            }, 404
+        
+        # Check if user owns the camp
+        user = get_current_user()
+        # if str(financial.camp.camp_manager_id) != str(user.id):
+        #     return {
+        #         'data': {
+        #             'code': 'AUTHORIZATION_ERROR',
+        #             'message': 'Access denied',
+        #             'details': None
+        #         }
+        #     }, 403
+        
+        success = financial_service.delete_financial(financial_id)
+        if not success:
+            return {
+                'data': {
+                    'code': 'DELETE_FAILED',
+                    'message': 'Failed to delete financial record',
+                    'details': None
+                }
+            }, 400
+        
+        return {
+            'data': {
+                'message': 'Financial record deleted successfully'
+            }
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Delete financial error: {str(e)}")
+        return {
+            'data': {
+                'code': 'DELETE_FINANCIAL_ERROR',
+                'message': 'Failed to delete financial record',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+# =============================================================================
+
+
+
 # Error handlers for the camp blueprint
 @camp_bp.errorhandler(400)
 def bad_request(error):
@@ -1711,4 +1957,3 @@ def internal_error(error):
             'details': None
         }
     }, 500
-

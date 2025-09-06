@@ -378,3 +378,47 @@ class Payment(BaseModel):
     def get_remaining_amount(self):
         """Get remaining unallocated amount from this payment"""
         return float(self.amount) - self.get_total_allocated_amount()
+
+
+
+class Financial(BaseModel):
+    __tablename__ = 'financial_transactions'
+    
+    # Core financial fields
+    amount = db.Column(db.Numeric(precision=10, scale=2), nullable=False)
+    received_by = db.Column(db.String(100), nullable=False)
+    transaction_type = db.Column(db.String(20), nullable=False)  # 'income', 'expense'
+    transaction_category = db.Column(db.String(50), nullable=False)  # 'offering', 'sales', etc.
+    date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    # Additional important fields
+    description = db.Column(db.Text)  # For detailed notes about the transaction
+    reference_number = db.Column(db.String(50), unique=True)  # For tracking/receipts
+    payment_method = db.Column(db.String(20))  # 'cash', 'check', 'momo', 'bank_transfer'
+    
+    # Optional fields for better tracking
+    approved_by = db.Column(db.String(100))  # Who approved this transaction
+    is_deleted = db.Column(db.Boolean, default=False, nullable=False)
+    camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if self.date is None:
+            self.date = datetime.now(timezone.utc)
+
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'amount': float(self.amount),
+            'received_by': self.received_by,
+            'transaction_type': self.transaction_type,
+            'transaction_category': self.transaction_category,
+            'date': self.date,
+            'description': self.description,
+            'reference_number': self.reference_number,
+            'payment_method': self.payment_method,
+            'approved_by': self.approved_by,
+            'is_deleted': self.is_deleted,
+            'camp_id': self.camp_id,
+        }

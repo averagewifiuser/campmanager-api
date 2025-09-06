@@ -1,8 +1,8 @@
-
 from apiflask import Schema
 from marshmallow import fields, validate, validates, ValidationError
 from datetime import datetime
 import re
+from decimal import Decimal
 
 from app._shared.schemas import BaseResponseSchema
 
@@ -692,6 +692,31 @@ class PaymentResponseSchema(BaseResponseSchema):
     payment_date = fields.DateTime()
     recorded_by = fields.String()
 
+
+class FinancialResponseSchema(BaseResponseSchema):
+    amount = fields.Decimal(required=True)
+    received_by = fields.String(required=True)
+    transaction_type = fields.String(required=True)
+    transaction_category = fields.String(required=True)
+    date = fields.DateTime(required=True)
+    description = fields.String(required=True)
+    reference_number = fields.String(required=True)
+    payment_method = fields.String(required=True)
+    approved_by = fields.String()
+
+
+class FinancialRequestSchema(Schema):
+    """Wrapper for financial request"""
+    amount = fields.Decimal(required=True)
+    received_by = fields.String(required=True)
+    transaction_type = fields.String(required=True, validate=validate.OneOf(['income', 'expense']))
+    transaction_category = fields.String(required=True, validate=validate.OneOf(['offering', 'sales', 'donation', 'camp_payment', 'camp_expense', 'other']))
+    date = fields.DateTime(required=True)
+    description = fields.String(required=True)
+    reference_number = fields.String(required=True)
+    payment_method = fields.String(required=True, validate=validate.OneOf(['cash', 'check', 'momo', 'bank_transfer', 'card']))
+    approved_by = fields.String()
+
 # Error Schema
 class ErrorSchema(Schema):
     """Schema for error responses"""
@@ -903,3 +928,15 @@ class OTPRequest(Schema):
 
 class OTPRequestWrapperSchema(Schema):
     data = fields.Nested(OTPRequest, required=True)
+
+
+# Financial Schemas
+class FinancialRequestWrapperSchema(Schema):
+    data = fields.Nested(FinancialRequestSchema, required=True)
+
+
+class FinancialResponseWrapperSchema(Schema):
+    data = fields.Nested(FinancialResponseSchema, required=True)
+
+class FinancialListResponseWrapperSchema(Schema):
+    data = fields.List(fields.Nested(FinancialResponseSchema), required=True)

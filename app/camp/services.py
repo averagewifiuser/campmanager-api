@@ -16,6 +16,7 @@ from .models import (
     RegistrationLink,
     Registration,
     Payment,
+    Financial,
     db,
 )
 
@@ -1706,7 +1707,19 @@ class PaymentService:
                 payment_reference=self.generate_payment_reference(payments_number),
                 payment_metadata=payment_data["payment_metadata"],
             )
+            financial = Financial(
+                camp_id=payment_data["camp_id"],
+                amount=amount_per_registration,
+                received_by=payment_data["recorded_by"],
+                transaction_type="income",
+                transaction_category="camp_payment",
+                description="Payment for camp registration",
+                reference_number=payment.payment_reference,
+                payment_method=payment_data["payment_channel"],
+                approved_by=payment_data["recorded_by"],
+            )
             db.session.add(payment)
+            db.session.add(financial)
 
             # Add registrations to payment
             for registration_id in payment_data["registration_ids"]:
@@ -1734,3 +1747,201 @@ class PaymentService:
         """Generate a random payment reference"""
         payments_number += 1
         return f"{payments_number:05d}"
+
+
+class FinancialService:
+    """Service class for financial-related business logic"""
+
+    def get_financial_by_id(self, financial_id: str) -> Optional[Financial]:
+        """Get financial record by ID"""
+        try:
+            return Financial.query.filter_by(id=financial_id, is_deleted=False).first()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_financial_by_id: {str(e)}")
+            return None
+
+    def create_financial(self, financial_data: Dict[str, Any], camp_id: str) -> Optional[Financial]:
+        """Create a new financial record"""
+        try:
+            # Validate required fields
+            required_fields = [
+                "amount",
+                "received_by",
+                "transaction_type",
+                "transaction_category",
+                "date",
+                "description",
+                "payment_method"
+            ]
+            for field in required_fields:
+                if field not in financial_data or financial_data[field] is None:
+                    raise ValueError(f"Missing required field: {field}")
+
+            # Validate transaction type
+            valid_transaction_types = ['income', 'expense']
+            if financial_data["transaction_type"] not in valid_transaction_types:
+                raise ValueError(f"Invalid transaction type. Must be one of: {', '.join(valid_transaction_types)}")
+
+            # Validate transaction category
+            valid_categories = ['offering', 'sales', 'donation', 'camp_payment', 'camp_expense', 'other']
+            if financial_data["transaction_category"] not in valid_categories:
+                raise ValueError(f"Invalid transaction category. Must be one of: {', '.join(valid_categories)}")
+
+            # Validate payment method
+            valid_payment_methods = ['cash', 'check', 'momo', 'bank_transfer', 'card']
+            if financial_data["payment_method"] not in valid_payment_methods:
+                raise ValueError(f"Invalid payment method. Must be one of: {', '.join(valid_payment_methods)}")
+
+            # Validate amount
+            if float(financial_data["amount"]) <= 0:
+                raise ValueError("Amount must be greater than 0")
+
+            financials_number = Financial.query.filter_by(camp_id=camp_id).count()
+            financial_data["reference_number"] = self.generate_financial_reference(financials_number)
+            financial_data["is_deleted"] = False
+            financial_data["camp_id"] = camp_id
+
+            # Convert date string to datetime if needed
+            if isinstance(financial_data["date"], str):
+                financial_data["date"] = datetime.fromisoformat(financial_data["date"])
+
+            financial = Financial(**financial_data)
+
+            db.session.add(financial)
+            db.session.commit()
+
+            current_app.logger.info(
+                f"New financial record created: {financial.transaction_type} - {financial.description} for camp {camp_id}"
+            )
+            return financial
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in create_financial: {str(e)}")
+            raise Exception("Failed to create financial record due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in create_financial: {str(e)}")
+            raise Exception("Failed to create financial record")
+
+    def get_financials_by_camp(self, camp_id: str) -> List[Financial]:
+        """Get all financial records for a camp"""
+        try:
+            financials = Financial.query.filter_by(camp_id=camp_id, is_deleted=False).order_by(Financial.date.desc()).all()
+            for financial in financials:
+                user = User.query.get(financial.received_by)
+                financial.received_by = user.full_name if user else financial.received_by
+            return financials
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_financials_by_camp: {str(e)}")
+            raise Exception("Failed to get financial records due to database error")
+        except Exception as e:
+            current_app.logger.error(f"Unexpected error in get_financials_by_camp: {str(e)}")
+            raise Exception("Failed to get financial records")
+
+    def update_financial(self, financial_id: str, update_data: Dict[str, Any]) -> Optional[Financial]:
+        """Update financial record information"""
+        try:
+            financial = self.get_financial_by_id(financial_id)
+            if not financial:
+                return None
+
+            # Validate transaction type if being updated
+            if "transaction_type" in update_data:
+                valid_transaction_types = ['income', 'expense']
+                if update_data["transaction_type"] not in valid_transaction_types:
+                    raise ValueError(f"Invalid transaction type. Must be one of: {', '.join(valid_transaction_types)}")
+
+            # Validate transaction category if being updated
+            if "transaction_category" in update_data:
+                valid_categories = ['offering', 'sales', 'donation', 'camp_payment', 'camp_expense', 'other']
+                if update_data["transaction_category"] not in valid_categories:
+                    raise ValueError(f"Invalid transaction category. Must be one of: {', '.join(valid_categories)}")
+
+            # Validate payment method if being updated
+            if "payment_method" in update_data:
+                valid_payment_methods = ['cash', 'check', 'momo', 'bank_transfer', 'card']
+                if update_data["payment_method"] not in valid_payment_methods:
+                    raise ValueError(f"Invalid payment method. Must be one of: {', '.join(valid_payment_methods)}")
+
+            # Validate amount if being updated
+            if "amount" in update_data and update_data["amount"] is not None:
+                if float(update_data["amount"]) <= 0:
+                    raise ValueError("Amount must be greater than 0")
+
+            # Update fields
+            updatable_fields = [
+                "amount",
+                "received_by",
+                "transaction_type",
+                "transaction_category",
+                "date",
+                "description",
+                "payment_method",
+                "approved_by"
+            ]
+
+            for field in updatable_fields:
+                if field in update_data:
+                    if field == "date" and update_data[field] is not None:
+                        # Convert date string to datetime if needed
+                        date_val = update_data[field]
+                        if isinstance(date_val, str):
+                            date_val = datetime.fromisoformat(date_val)
+                        setattr(financial, field, date_val)
+                    elif field == "amount" and update_data[field] is not None:
+                        setattr(financial, field, Decimal(str(update_data[field])))
+                    else:
+                        if update_data[field] is not None:
+                            value = (
+                                update_data[field].strip()
+                                if isinstance(update_data[field], str)
+                                else update_data[field]
+                            )
+                            setattr(financial, field, value)
+
+            db.session.commit()
+
+            current_app.logger.info(f"Financial record updated: {financial.description}")
+            return financial
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in update_financial: {str(e)}")
+            raise Exception("Failed to update financial record due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in update_financial: {str(e)}")
+            raise Exception("Failed to update financial record")
+
+    def delete_financial(self, financial_id: str) -> bool:
+        """Soft delete a financial record"""
+        try:
+            financial = self.get_financial_by_id(financial_id)
+            if not financial:
+                return False
+
+            # Soft delete by setting is_deleted to True
+            financial.is_deleted = True
+            db.session.commit()
+
+            current_app.logger.info(f"Financial record deleted: {financial.description}")
+            return True
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in delete_financial: {str(e)}")
+            raise Exception("Failed to delete financial record due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in delete_financial: {str(e)}")
+            raise Exception("Failed to delete financial record")
+
+    def generate_financial_reference(self, financials_number: int) -> str:
+        """Generate a financial reference number"""
+        financials_number += 1
+        return f"FIN{financials_number:05d}"
