@@ -422,3 +422,76 @@ class Financial(BaseModel):
             'is_deleted': self.is_deleted,
             'camp_id': self.camp_id,
         }
+
+class Inventory(BaseModel):
+    __tablename__ = 'inventory'
+    
+    # Core inventory fields
+    cost = db.Column(db.Numeric(precision=10, scale=2), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    inventory_type = db.Column(db.String(20), nullable=False)  # 'shirts', 'hoodies', 'wristbands', etc.
+    is_deleted = db.Column(db.Boolean, default=False, nullable=False)
+    
+    # Additional important fields for inventory management
+    quantity = db.Column(db.Integer, nullable=False, default=0)
+    camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'cost': float(self.cost),
+            'name': self.name,
+            'description': self.description,
+            'inventory_type': self.inventory_type,
+            'is_deleted': self.is_deleted,
+            'quantity': self.quantity,
+            'camp_id': self.camp_id,
+        }
+
+
+class Purchase(BaseModel):
+    __tablename__ = 'purchases'
+    
+    # Core purchase fields
+    amount = db.Column(db.Numeric(precision=10, scale=2), nullable=False)
+    purchase_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
+    items = db.Column(JSON, nullable=False)  # Changed from inventory_ids to items with quantities
+    sold_by = db.Column(String(36), db.ForeignKey('users.id'), nullable=False)
+    
+    # Keep inventory_ids for backward compatibility (will be deprecated)
+    inventory_ids = db.Column(db.String(100), nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'amount': float(self.amount),
+            'purchase_date': self.purchase_date,
+            'camp_id': self.camp_id,
+            'items': self.items,
+            'sold_by': self.sold_by,
+            # Include legacy field for backward compatibility
+            'inventory_ids': self.inventory_ids,
+        }
+
+
+class Pledge(BaseModel):
+    __tablename__ = 'pledges'
+    
+    # Core pledge fields
+    amount = db.Column(db.Numeric(precision=10, scale=2), nullable=False)
+    pledge_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
+    camper_id = db.Column(String(36), db.ForeignKey('registrations.id'), nullable=False)
+    status = db.Column(db.String(20), nullable=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'amount': float(self.amount),
+            'pledge_date': self.pledge_date,
+            'camp_id': self.camp_id,
+            'camper_id': self.camper_id,
+            'status': self.status,
+        }

@@ -710,12 +710,128 @@ class FinancialRequestSchema(Schema):
     amount = fields.Decimal(required=True)
     received_by = fields.String(required=True)
     transaction_type = fields.String(required=True, validate=validate.OneOf(['income', 'expense']))
-    transaction_category = fields.String(required=True, validate=validate.OneOf(['offering', 'sales', 'donation', 'camp_payment', 'camp_expense', 'other']))
+    transaction_category = fields.String(required=True, validate=validate.OneOf(['offering', 'sales', 'donation', 'camp_payment', 'camp_expense', 'other', 'pledge']))
     date = fields.DateTime(required=True)
     description = fields.String(required=True)
     reference_number = fields.String(required=True)
     payment_method = fields.String(required=True, validate=validate.OneOf(['cash', 'check', 'momo', 'bank_transfer', 'card']))
     approved_by = fields.String()
+
+
+class InventoryRequestSchema(Schema):
+    cost = fields.Decimal(required=True)
+    name = fields.String(required=True)
+    description = fields.String()
+    inventory_type = fields.String(required=True, validate=validate.OneOf([ 'shirts', 'hoodies',  'wristbands', 'sweat-shirts', 'keychain', 'caps', 'other']))
+    quantity = fields.Integer(required=True)
+
+
+class InventoryRequestWrapperSchema(Schema):
+    data = fields.Nested(InventoryRequestSchema, required=True)
+
+class InventoryResponseSchema(BaseResponseSchema):
+    cost = fields.Decimal(required=True)
+    name = fields.String(required=True)
+    description = fields.String()
+    inventory_type = fields.String(required=True, validate=validate.OneOf(['shirts', 'hoodies', 'wristbands', 'sweat-shirts', 'keychain', 'caps', 'other']))
+    is_deleted = fields.Boolean(required=True)
+    quantity = fields.Integer(required=True)
+    camp_id = fields.String(required=True)
+
+
+class InventoryResponseWrapperSchema(Schema):
+    """Wrapper for inventory response"""
+    data = fields.Nested(InventoryResponseSchema, required=True)
+
+
+class InventoryListResponseWrapperSchema(Schema):
+    """Wrapper for inventory list response"""
+    data = fields.List(fields.Nested(InventoryResponseSchema), required=True)
+
+
+# Purchase Schemas
+class PurchaseItemSchema(Schema):
+    """Schema for individual purchase item"""
+    inventory_id = fields.String(required=True)
+    quantity = fields.Integer(required=True, validate=validate.Range(min=1))
+
+class PurchaseRequestSchema(Schema):
+    """Schema for purchase request"""
+    amount = fields.Decimal(required=True, validate=validate.Range(min=0))
+    items = fields.List(fields.Nested(PurchaseItemSchema), required=True, validate=validate.Length(min=1))
+    # Keep inventory_ids for backward compatibility
+    inventory_ids = fields.String(required=False)
+
+
+class PurchaseRequestWrapperSchema(Schema):
+    """Wrapper for purchase request"""
+    data = fields.Nested(PurchaseRequestSchema, required=True)
+
+
+class PurchaseResponseSchema(BaseResponseSchema):
+    """Schema for purchase response"""
+    amount = fields.Decimal(required=True)
+    purchase_date = fields.DateTime(required=True)
+    camp_id = fields.String(required=True)
+    items = fields.List(fields.Nested(PurchaseItemSchema), required=False)
+    inventory_ids = fields.String(required=True)  # Keep for backward compatibility
+    sold_by = fields.String(required=True)
+
+
+class PurchaseResponseWrapperSchema(Schema):
+    """Wrapper for purchase response"""
+    data = fields.Nested(PurchaseResponseSchema, required=True)
+
+
+class PurchaseListResponseWrapperSchema(Schema):
+    """Wrapper for purchase list response"""
+    data = fields.List(fields.Nested(PurchaseResponseSchema), required=True)
+
+
+# Pledge Schemas
+class PledgeRequestSchema(Schema):
+    """Schema for pledge request"""
+    amount = fields.Decimal(required=True, validate=validate.Range(min=0))
+    camper_id = fields.String(required=True)
+    status = fields.String(required=True, validate=validate.OneOf(['pending', 'fulfilled', 'cancelled']))
+
+
+class PledgeStatusChangeSchema(Schema):
+    """Schema for pledge status change request"""
+    status = fields.String(required=True, validate=validate.OneOf(['pending', 'fulfilled', 'cancelled']))
+    camp_id = fields.String(required=False)
+
+
+class PledgeRequestWrapperSchema(Schema):
+    """Wrapper for pledge request"""
+    data = fields.Nested(PledgeRequestSchema, required=True)
+
+
+class PledgeStatusChangeWrapperSchema(Schema):
+    """Wrapper for pledge status change request"""
+    data = fields.Nested(PledgeStatusChangeSchema, required=True)
+
+
+class PledgeResponseSchema(BaseResponseSchema):
+    """Schema for pledge response"""
+    amount = fields.Decimal(required=True)
+    pledge_date = fields.DateTime(required=True)
+    camp_id = fields.String(required=True)
+    camper_id = fields.String(required=True)
+    camper_name = fields.String(required=True)
+    camper_code = fields.String(required=True)
+    status = fields.String(required=True)
+
+
+class PledgeResponseWrapperSchema(Schema):
+    """Wrapper for pledge response"""
+    data = fields.Nested(PledgeResponseSchema, required=True)
+
+
+class PledgeListResponseWrapperSchema(Schema):
+    """Wrapper for pledge list response"""
+    data = fields.List(fields.Nested(PledgeResponseSchema), required=True)
+
 
 # Error Schema
 class ErrorSchema(Schema):

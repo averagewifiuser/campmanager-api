@@ -2,7 +2,7 @@ from flask import request, current_app
 from apiflask import APIBlueprint
 from flask_jwt_extended import jwt_required
 
-from .models import Camp, Church, Category, CustomField, RegistrationLink, Registration, Payment
+from .models import Camp, Church, Category, CustomField, RegistrationLink, Registration, Payment, Pledge
 from .schemas import (
     # Camp schemas
     CampCreateRequestSchema,
@@ -53,12 +53,28 @@ from .schemas import (
     FinancialListResponseWrapperSchema,
     FinancialResponseWrapperSchema,
     
+    # Inventory Schemas
+    InventoryRequestWrapperSchema,
+    InventoryResponseWrapperSchema,
+    InventoryListResponseWrapperSchema,
+    
+    # Purchase Schemas
+    PurchaseRequestWrapperSchema,
+    PurchaseResponseWrapperSchema,
+    PurchaseListResponseWrapperSchema,
+    
+    # Pledge Schemas
+    PledgeRequestWrapperSchema,
+    PledgeResponseWrapperSchema,
+    PledgeListResponseWrapperSchema,
+    PledgeStatusChangeWrapperSchema,
+    
     # Check-in Schemas
     CheckedInRequestWrapperSchema,
     RegistrationsQuerySchema,
 )
 from app._shared.schemas import SuccessMessageWrapperSchema
-from .services import CampService, ChurchService, CategoryService, CustomFieldService, RegistrationLinkService, RegistrationService, PaymentService, FinancialService
+from .services import CampService, ChurchService, CategoryService, CustomFieldService, RegistrationLinkService, RegistrationService, PaymentService, FinancialService, InventoryService, PurchaseService, PledgeService
 from .._shared.auth import token_required, role_required, camp_owner_required, optional_auth, get_current_user
 
 
@@ -74,6 +90,9 @@ registration_link_service = RegistrationLinkService()
 registration_service = RegistrationService()
 payment_service = PaymentService()
 financial_service = FinancialService()
+inventory_service = InventoryService()
+purchase_service = PurchaseService()
+pledge_service = PledgeService()
 
 # =============================================================================
 # CAMP ROUTES
@@ -1918,7 +1937,828 @@ def delete_financial(financial_id):
 
 
 # =============================================================================
+# INVENTORY ROUTES
+# =============================================================================
 
+@camp_bp.get('/<camp_id>/inventory')
+@camp_bp.output(InventoryListResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get camp inventory',
+    description='Get all inventory items for a camp (Manager only)'
+)
+@token_required
+# @camp_owner_required()
+def get_camp_inventory(camp_id):
+    """Get all inventory items for camp"""
+    try:
+        inventory_items = inventory_service.get_inventory_by_camp(camp_id)
+        
+        return {
+            'data': [item.to_dict() for item in inventory_items]
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get inventory error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_INVENTORY_ERROR',
+                'message': 'Failed to retrieve inventory items',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.post('/<camp_id>/inventory')
+@camp_bp.input(InventoryRequestWrapperSchema)
+@camp_bp.output(InventoryResponseWrapperSchema, status_code=201)
+@camp_bp.doc(
+    summary='Create inventory item',
+    description='Create a new inventory item for a camp'
+)
+@token_required
+# @camp_owner_required()
+def create_inventory_item(camp_id, json_data):
+    """Create inventory item"""
+    try:
+        inventory_data = json_data['data']
+        inventory_data['camp_id'] = camp_id
+        
+        new_inventory = inventory_service.create_inventory(inventory_data)
+        
+        return {
+            'data': new_inventory.to_dict()
+        }, 201
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Create inventory error: {str(e)}")
+        return {
+            'data': {
+                'code': 'CREATE_INVENTORY_ERROR',
+                'message': 'Failed to create inventory item',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.get('/inventory/<inventory_id>')
+@camp_bp.output(InventoryResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get inventory item details',
+    description='Get details of a specific inventory item'
+)
+@token_required
+def get_inventory_item(inventory_id):
+    """Get inventory item details"""
+    try:
+        # Get camp_id from query params or determine from inventory item
+        camp_id = request.args.get('camp_id')
+        if not camp_id:
+            return {
+                'data': {
+                    'code': 'MISSING_CAMP_ID',
+                    'message': 'Camp ID is required',
+                    'details': None
+                }
+            }, 400
+        
+        inventory_item = inventory_service.get_inventory_by_id(inventory_id, camp_id)
+        if not inventory_item:
+            return {
+                'data': {
+                    'code': 'INVENTORY_NOT_FOUND',
+                    'message': 'Inventory item not found',
+                    'details': None
+                }
+            }, 404
+        
+        return {
+            'data': inventory_item.to_dict()
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get inventory item error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_INVENTORY_ITEM_ERROR',
+                'message': 'Failed to retrieve inventory item',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.put('/inventory/<inventory_id>')
+@camp_bp.input(InventoryRequestWrapperSchema)
+@camp_bp.output(InventoryResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Update inventory item',
+    description='Update inventory item details'
+)
+@token_required
+def update_inventory_item(inventory_id, json_data):
+    """Update inventory item"""
+    try:
+        update_data = json_data['data']
+        camp_id = update_data.get('camp_id')
+        
+        if not camp_id:
+            return {
+                'data': {
+                    'code': 'MISSING_CAMP_ID',
+                    'message': 'Camp ID is required',
+                    'details': None
+                }
+            }, 400
+        
+        updated_inventory = inventory_service.update_inventory(inventory_id, update_data, camp_id)
+        
+        if not updated_inventory:
+            return {
+                'data': {
+                    'code': 'INVENTORY_NOT_FOUND',
+                    'message': 'Inventory item not found',
+                    'details': None
+                }
+            }, 404
+        
+        return {
+            'data': updated_inventory.to_dict()
+        }, 200
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Update inventory item error: {str(e)}")
+        return {
+            'data': {
+                'code': 'UPDATE_INVENTORY_ERROR',
+                'message': 'Failed to update inventory item',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.delete('/inventory/<inventory_id>')
+@camp_bp.output(SuccessMessageWrapperSchema)
+@camp_bp.doc(
+    summary='Delete inventory item',
+    description='Delete/soft delete an inventory item'
+)
+@token_required
+def delete_inventory_item(inventory_id):
+    """Delete inventory item"""
+    try:
+        camp_id = request.args.get('camp_id')
+        if not camp_id:
+            return {
+                'data': {
+                    'code': 'MISSING_CAMP_ID',
+                    'message': 'Camp ID is required',
+                    'details': None
+                }
+            }, 400
+        
+        success = inventory_service.delete_inventory(inventory_id, camp_id)
+        if not success:
+            return {
+                'data': {
+                    'code': 'DELETE_FAILED',
+                    'message': 'Failed to delete inventory item',
+                    'details': None
+                }
+            }, 400
+        
+        return {
+            'data': {
+                'message': 'Inventory item deleted successfully'
+            }
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Delete inventory item error: {str(e)}")
+        return {
+            'data': {
+                'code': 'DELETE_INVENTORY_ERROR',
+                'message': 'Failed to delete inventory item',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+# =============================================================================
+# PURCHASE ROUTES
+# =============================================================================
+
+@camp_bp.get('/<camp_id>/purchases')
+@camp_bp.output(PurchaseListResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get camp purchases',
+    description='Get all purchase records for a camp (Manager only)'
+)
+@token_required
+# @camp_owner_required()
+def get_camp_purchases(camp_id):
+    """Get all purchase records for camp"""
+    try:
+        purchases = purchase_service.get_purchases_by_camp(camp_id)
+        
+        return {
+            'data': [purchase.to_dict() for purchase in purchases]
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get purchases error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_PURCHASES_ERROR',
+                'message': 'Failed to retrieve purchase records',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.post('/<camp_id>/purchases')
+@camp_bp.input(PurchaseRequestWrapperSchema)
+@camp_bp.output(PurchaseResponseWrapperSchema, status_code=201)
+@camp_bp.doc(
+    summary='Create purchase record',
+    description='Create a new purchase record for a camp'
+)
+@token_required
+# @camp_owner_required()
+def create_purchase(camp_id, json_data):
+    """Create purchase record"""
+    try:
+        purchase_data = json_data['data']
+        purchase_data['camp_id'] = camp_id
+        purchase_data['sold_by'] = str(get_current_user().full_name)
+        
+        new_purchase = purchase_service.create_purchase(purchase_data)
+        
+        return {
+            'data': new_purchase.to_dict()
+        }, 201
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Create purchase error: {str(e)}")
+        return {
+            'data': {
+                'code': 'CREATE_PURCHASE_ERROR',
+                'message': 'Failed to create purchase record',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.get('/purchases/<purchase_id>')
+@camp_bp.output(PurchaseResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get purchase record details',
+    description='Get details of a specific purchase record'
+)
+@token_required
+def get_purchase(purchase_id):
+    """Get purchase record details"""
+    try:
+        camp_id = request.args.get('camp_id')
+        if not camp_id:
+            return {
+                'data': {
+                    'code': 'MISSING_CAMP_ID',
+                    'message': 'Camp ID is required',
+                    'details': None
+                }
+            }, 400
+        
+        purchase = purchase_service.get_purchase_by_id(purchase_id, camp_id)
+        if not purchase:
+            return {
+                'data': {
+                    'code': 'PURCHASE_NOT_FOUND',
+                    'message': 'Purchase record not found',
+                    'details': None
+                }
+            }, 404
+        
+        return {
+            'data': purchase.to_dict()
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get purchase error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_PURCHASE_ERROR',
+                'message': 'Failed to retrieve purchase record',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.put('/purchases/<purchase_id>')
+@camp_bp.input(PurchaseRequestWrapperSchema)
+@camp_bp.output(PurchaseResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Update purchase record',
+    description='Update purchase record details'
+)
+@token_required
+def update_purchase(purchase_id, json_data):
+    """Update purchase record"""
+    try:
+        update_data = json_data['data']
+        camp_id = update_data.get('camp_id')
+        
+        if not camp_id:
+            return {
+                'data': {
+                    'code': 'MISSING_CAMP_ID',
+                    'message': 'Camp ID is required',
+                    'details': None
+                }
+            }, 400
+        
+        updated_purchase = purchase_service.update_purchase(purchase_id, update_data, camp_id)
+        
+        if not updated_purchase:
+            return {
+                'data': {
+                    'code': 'PURCHASE_NOT_FOUND',
+                    'message': 'Purchase record not found',
+                    'details': None
+                }
+            }, 404
+        
+        return {
+            'data': updated_purchase.to_dict()
+        }, 200
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Update purchase error: {str(e)}")
+        return {
+            'data': {
+                'code': 'UPDATE_PURCHASE_ERROR',
+                'message': 'Failed to update purchase record',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.delete('/purchases/<purchase_id>')
+@camp_bp.output(SuccessMessageWrapperSchema)
+@camp_bp.doc(
+    summary='Delete purchase record',
+    description='Delete a purchase record'
+)
+@token_required
+def delete_purchase(purchase_id):
+    """Delete purchase record"""
+    try:
+        camp_id = request.args.get('camp_id')
+        if not camp_id:
+            return {
+                'data': {
+                    'code': 'MISSING_CAMP_ID',
+                    'message': 'Camp ID is required',
+                    'details': None
+                }
+            }, 400
+        
+        success = purchase_service.delete_purchase(purchase_id, camp_id)
+        if not success:
+            return {
+                'data': {
+                    'code': 'DELETE_FAILED',
+                    'message': 'Failed to delete purchase record',
+                    'details': None
+                }
+            }, 400
+        
+        return {
+            'data': {
+                'message': 'Purchase record deleted successfully'
+            }
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Delete purchase error: {str(e)}")
+        return {
+            'data': {
+                'code': 'DELETE_PURCHASE_ERROR',
+                'message': 'Failed to delete purchase record',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+# =============================================================================
+# PLEDGE ROUTES
+# =============================================================================
+
+@camp_bp.get('/<camp_id>/pledges')
+@camp_bp.output(PledgeListResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get camp pledges',
+    description='Get all pledge records for a camp (Manager only)'
+)
+@token_required
+# @camp_owner_required()
+def get_camp_pledges(camp_id):
+    """Get all pledge records for camp"""
+    try:
+        pledges = pledge_service.get_pledges_by_camp(camp_id)
+        pledge_data = [pledge.to_dict() for pledge in pledges]
+        for pledge in pledge_data:
+            camper = Registration.query.get(pledge['camper_id'])
+            if camper:
+                pledge['camper_name'] = camper.last_name + ', ' + camper.surname
+                pledge['camper_code'] = camper.camper_code
+            
+        
+        return {
+            'data': pledge_data
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get pledges error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_PLEDGES_ERROR',
+                'message': 'Failed to retrieve pledge records',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.post('/<camp_id>/pledges')
+@camp_bp.input(PledgeRequestWrapperSchema)
+@camp_bp.output(PledgeResponseWrapperSchema, status_code=201)
+@camp_bp.doc(
+    summary='Create pledge record',
+    description='Create a new pledge record for a camp'
+)
+@token_required
+# @camp_owner_required()
+def create_pledge(camp_id, json_data):
+    """Create pledge record"""
+    try:
+        pledge_data = json_data['data']
+        pledge_data['camp_id'] = camp_id
+        
+        new_pledge = pledge_service.create_pledge(pledge_data)
+        
+        return {
+            'data': new_pledge.to_dict()
+        }, 201
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Create pledge error: {str(e)}")
+        return {
+            'data': {
+                'code': 'CREATE_PLEDGE_ERROR',
+                'message': 'Failed to create pledge record',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.get('/pledges/<pledge_id>')
+@camp_bp.output(PledgeResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get pledge record details',
+    description='Get details of a specific pledge record'
+)
+@token_required
+def get_pledge(pledge_id):
+    """Get pledge record details"""
+    try:
+        camp_id = request.args.get('camp_id')
+        if not camp_id:
+            return {
+                'data': {
+                    'code': 'MISSING_CAMP_ID',
+                    'message': 'Camp ID is required',
+                    'details': None
+                }
+            }, 400
+        
+        pledge = pledge_service.get_pledge_by_id(pledge_id, camp_id)
+        if not pledge:
+            return {
+                'data': {
+                    'code': 'PLEDGE_NOT_FOUND',
+                    'message': 'Pledge record not found',
+                    'details': None
+                }
+            }, 404
+        
+        return {
+            'data': pledge.to_dict()
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get pledge error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_PLEDGE_ERROR',
+                'message': 'Failed to retrieve pledge record',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.put('/pledges/<pledge_id>')
+@camp_bp.input(PledgeRequestWrapperSchema)
+@camp_bp.output(PledgeResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Update pledge record',
+    description='Update pledge record details'
+)
+@token_required
+def update_pledge(pledge_id, json_data):
+    """Update pledge record"""
+    try:
+        update_data = json_data['data']
+        camp_id = update_data.get('camp_id')
+        
+        if not camp_id:
+            return {
+                'data': {
+                    'code': 'MISSING_CAMP_ID',
+                    'message': 'Camp ID is required',
+                    'details': None
+                }
+            }, 400
+        
+        updated_pledge = pledge_service.update_pledge(pledge_id, update_data, camp_id)
+        
+        if not updated_pledge:
+            return {
+                'data': {
+                    'code': 'PLEDGE_NOT_FOUND',
+                    'message': 'Pledge record not found',
+                    'details': None
+                }
+            }, 404
+        
+        return {
+            'data': updated_pledge.to_dict()
+        }, 200
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Update pledge error: {str(e)}")
+        return {
+            'data': {
+                'code': 'UPDATE_PLEDGE_ERROR',
+                'message': 'Failed to update pledge record',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.delete('/pledges/<pledge_id>')
+@camp_bp.output(SuccessMessageWrapperSchema)
+@camp_bp.doc(
+    summary='Delete pledge record',
+    description='Delete a pledge record'
+)
+@token_required
+def delete_pledge(pledge_id):
+    """Delete pledge record"""
+    try:
+        camp_id = request.args.get('camp_id')
+        if not camp_id:
+            return {
+                'data': {
+                    'code': 'MISSING_CAMP_ID',
+                    'message': 'Camp ID is required',
+                    'details': None
+                }
+            }, 400
+        
+        success = pledge_service.delete_pledge(pledge_id, camp_id)
+        if not success:
+            return {
+                'data': {
+                    'code': 'DELETE_FAILED',
+                    'message': 'Failed to delete pledge record',
+                    'details': None
+                }
+            }, 400
+        
+        return {
+            'data': {
+                'message': 'Pledge record deleted successfully'
+            }
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Delete pledge error: {str(e)}")
+        return {
+            'data': {
+                'code': 'DELETE_PLEDGE_ERROR',
+                'message': 'Failed to delete pledge record',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.get('/<camp_id>/pledges/stats')
+@camp_bp.output({
+    'type': 'object',
+    'properties': {
+        'data': {
+            'type': 'object',
+            'properties': {
+                'total_pledges': {'type': 'integer'},
+                'total_amount': {'type': 'number'},
+                'pending_pledges': {'type': 'integer'},
+                'pending_amount': {'type': 'number'},
+                'fulfilled_pledges': {'type': 'integer'},
+                'fulfilled_amount': {'type': 'number'},
+                'cancelled_pledges': {'type': 'integer'},
+                'cancelled_amount': {'type': 'number'},
+                'fulfillment_rate': {'type': 'number'}
+            }
+        }
+    }
+})
+@camp_bp.doc(
+    summary='Get pledge statistics',
+    description='Get pledge statistics for a camp (Manager only)'
+)
+@token_required
+# @camp_owner_required()
+def get_pledge_stats(camp_id):
+    """Get pledge statistics for camp"""
+    try:
+        stats = pledge_service.get_camp_pledge_stats(camp_id)
+        
+        return {
+            'data': stats
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get pledge stats error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_PLEDGE_STATS_ERROR',
+                'message': 'Failed to retrieve pledge statistics',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.get('/registrations/<registration_id>/pledges')
+@camp_bp.output(PledgeListResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get camper pledges',
+    description='Get all pledges for a specific camper'
+)
+@token_required
+def get_camper_pledges(registration_id):
+    """Get all pledges for a specific camper"""
+    try:
+        camp_id = request.args.get('camp_id')
+        if not camp_id:
+            return {
+                'data': {
+                    'code': 'MISSING_CAMP_ID',
+                    'message': 'Camp ID is required',
+                    'details': None
+                }
+            }, 400
+        
+        pledges = pledge_service.get_pledges_by_camper(registration_id, camp_id)
+        
+        return {
+            'data': [pledge.to_dict() for pledge in pledges]
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get camper pledges error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_CAMPER_PLEDGES_ERROR',
+                'message': 'Failed to retrieve camper pledges',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.patch('/pledges/<pledge_id>/status')
+@camp_bp.input(PledgeStatusChangeWrapperSchema)
+@camp_bp.output(PledgeResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Change pledge status',
+    description='Change the status of a pledge between pending, fulfilled, and cancelled'
+)
+@token_required
+def change_pledge_status(pledge_id, json_data):
+    """Change pledge status"""
+    try:
+        # camp_id = request.args.get('camp_id')
+        # if not camp_id:
+        #     return {
+        #         'data': {
+        #             'code': 'MISSING_CAMP_ID',
+        #             'message': 'Camp ID is required',
+        #             'details': None
+        #         }
+        #     }, 400
+        
+        status_data = json_data['data']
+        new_status = status_data['status']
+        camp_id = status_data.get('camp_id')
+        
+        updated_pledge = pledge_service.change_pledge_status(pledge_id, new_status, camp_id)
+        
+        if not updated_pledge:
+            return {
+                'data': {
+                    'code': 'PLEDGE_NOT_FOUND',
+                    'message': 'Pledge record not found',
+                    'details': None
+                }
+            }, 404
+        
+        # Get camper information for response
+        pledge_data = updated_pledge.to_dict()
+        camper = Registration.query.get(updated_pledge.camper_id)
+        if camper:
+            pledge_data['camper_name'] = camper.last_name + ', ' + camper.surname
+            pledge_data['camper_code'] = camper.camper_code
+        
+        return {
+            'data': pledge_data
+        }, 200
+        
+    except ValueError as e:
+        print(e)
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Change pledge status error: {str(e)}")
+        return {
+            'data': {
+                'code': 'CHANGE_PLEDGE_STATUS_ERROR',
+                'message': 'Failed to change pledge status',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+# =============================================================================
 
 
 # Error handlers for the camp blueprint

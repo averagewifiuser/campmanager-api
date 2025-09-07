@@ -17,6 +17,8 @@ from .models import (
     Registration,
     Payment,
     Financial,
+    Inventory,
+    Pledge,
     db,
 )
 
@@ -1783,12 +1785,12 @@ class FinancialService:
                 raise ValueError(f"Invalid transaction type. Must be one of: {', '.join(valid_transaction_types)}")
 
             # Validate transaction category
-            valid_categories = ['offering', 'sales', 'donation', 'camp_payment', 'camp_expense', 'other']
+            valid_categories = ['offering', 'sales', 'donation', 'camp_payment', 'camp_expense', 'other', 'pledge']
             if financial_data["transaction_category"] not in valid_categories:
                 raise ValueError(f"Invalid transaction category. Must be one of: {', '.join(valid_categories)}")
 
             # Validate payment method
-            valid_payment_methods = ['cash', 'check', 'momo', 'bank_transfer', 'card']
+            valid_payment_methods = ['cash', 'check', 'momo', 'bank_transfer', 'card', 'other']
             if financial_data["payment_method"] not in valid_payment_methods:
                 raise ValueError(f"Invalid payment method. Must be one of: {', '.join(valid_payment_methods)}")
 
@@ -1862,7 +1864,7 @@ class FinancialService:
 
             # Validate payment method if being updated
             if "payment_method" in update_data:
-                valid_payment_methods = ['cash', 'check', 'momo', 'bank_transfer', 'card']
+                valid_payment_methods = ['cash', 'check', 'momo', 'bank_transfer', 'card', 'other']
                 if update_data["payment_method"] not in valid_payment_methods:
                     raise ValueError(f"Invalid payment method. Must be one of: {', '.join(valid_payment_methods)}")
 
@@ -1945,3 +1947,592 @@ class FinancialService:
         """Generate a financial reference number"""
         financials_number += 1
         return f"FIN{financials_number:05d}"
+
+
+class InventoryService:
+    """Service class for inventory-related business logic"""
+
+    def get_inventory_by_id(self, inventory_id: str, camp_id: str) -> Optional[Inventory]:
+        """Get inventory record by ID"""
+        try:
+            return Inventory.query.filter_by(id=inventory_id, camp_id=camp_id, is_deleted=False).first()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_inventory_by_id: {str(e)}")
+            return None
+
+    def get_inventory_by_camp(self, camp_id: str) -> List[Inventory]:
+        """Get all inventory records for a camp"""
+        try:
+            return Inventory.query.filter_by(camp_id=camp_id, is_deleted=False).all()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_inventory_by_camp: {str(e)}")
+            return []
+
+    def create_inventory(self, inventory_data: Dict[str, Any]) -> Optional[Inventory]:
+        """Create a new inventory record"""
+        try:
+            # Validate required fields
+            required_fields = ["cost", "name", "inventory_type", "quantity", "camp_id"]
+            for field in required_fields:
+                if field not in inventory_data or inventory_data[field] is None:
+                    raise ValueError(f"Missing required field: {field}")
+
+            # Validate cost and quantity
+            if float(inventory_data["cost"]) < 0:
+                raise ValueError("Cost must be non-negative")
+            
+            if int(inventory_data["quantity"]) < 0:
+                raise ValueError("Quantity must be non-negative")
+
+            # Validate inventory type
+            valid_types = ['shirts', 'hoodies', 'wristbands', 'sweat-shirts', 'keychain', 'caps', 'other']
+            if inventory_data["inventory_type"] not in valid_types:
+                raise ValueError(f"Invalid inventory type. Must be one of: {', '.join(valid_types)}")
+
+            inventory_data["is_deleted"] = False
+            inventory = Inventory(**inventory_data)
+            db.session.add(inventory)
+            db.session.commit()
+
+            current_app.logger.info(
+                f"New inventory item created: {inventory.name} for camp {inventory_data['camp_id']}"
+            )
+            return inventory
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in create_inventory: {str(e)}")
+            raise Exception("Failed to create inventory due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in create_inventory: {str(e)}")
+            raise Exception("Failed to create inventory")
+
+    def update_inventory(self, inventory_id: str, update_data: Dict[str, Any], camp_id: str) -> Optional[Inventory]:
+        """Update inventory record information"""
+        try:
+            inventory = self.get_inventory_by_id(inventory_id, camp_id)
+            if not inventory:
+                return None
+
+            # Validate cost and quantity if being updated
+            if "cost" in update_data and update_data["cost"] is not None:
+                if float(update_data["cost"]) < 0:
+                    raise ValueError("Cost must be non-negative")
+
+            if "quantity" in update_data and update_data["quantity"] is not None:
+                if int(update_data["quantity"]) < 0:
+                    raise ValueError("Quantity must be non-negative")
+
+            # Validate inventory type if being updated
+            if "inventory_type" in update_data:
+                valid_types = ['shirts', 'hoodies', 'wristbands', 'sweat-shirts', 'keychain', 'caps', 'other']
+                if update_data["inventory_type"] not in valid_types:
+                    raise ValueError(f"Invalid inventory type. Must be one of: {', '.join(valid_types)}")
+
+            # Update fields
+            updatable_fields = ["cost", "name", "description", "inventory_type", "quantity"]
+            for field in updatable_fields:
+                if field in update_data:
+                    if field == "cost" and update_data[field] is not None:
+                        setattr(inventory, field, Decimal(str(update_data[field])))
+                    elif field == "quantity" and update_data[field] is not None:
+                        setattr(inventory, field, int(update_data[field]))
+                    else:
+                        if update_data[field] is not None:
+                            value = (
+                                update_data[field].strip()
+                                if isinstance(update_data[field], str)
+                                else update_data[field]
+                            )
+                            setattr(inventory, field, value)
+
+            db.session.commit()
+
+            current_app.logger.info(f"Inventory updated: {inventory.name}")
+            return inventory
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in update_inventory: {str(e)}")
+            raise Exception("Failed to update inventory due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in update_inventory: {str(e)}")
+            raise Exception("Failed to update inventory")
+
+    def delete_inventory(self, inventory_id: str, camp_id: str) -> bool:
+        """Soft delete an inventory record"""
+        try:
+            inventory = self.get_inventory_by_id(inventory_id, camp_id)
+            if not inventory:
+                return False
+
+            # Soft delete by setting is_deleted to True
+            inventory.is_deleted = True
+            db.session.commit()
+
+            current_app.logger.info(f"Inventory deleted: {inventory.name}")
+            return True
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in delete_inventory: {str(e)}")
+            raise Exception("Failed to delete inventory due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in delete_inventory: {str(e)}")
+            raise Exception("Failed to delete inventory")
+
+
+class PurchaseService:
+    """Service class for purchase-related business logic"""
+
+    def get_purchase_by_id(self, purchase_id: str, camp_id: str) -> Optional['Purchase']:
+        """Get purchase record by ID"""
+        try:
+            from .models import Purchase
+            return Purchase.query.filter_by(id=purchase_id, camp_id=camp_id).first()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_purchase_by_id: {str(e)}")
+            return None
+
+    def get_purchases_by_camp(self, camp_id: str) -> List['Purchase']:
+        """Get all purchase records for a camp"""
+        try:
+            from .models import Purchase
+            purchases = Purchase.query.filter_by(camp_id=camp_id).order_by(Purchase.purchase_date.desc()).all()
+            for purchase in purchases:
+                user = User.query.get(purchase.sold_by)
+                purchase.sold_by = user.full_name if user else purchase.sold_by
+            return purchases
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_purchases_by_camp: {str(e)}")
+            return []
+
+    def create_purchase(self, purchase_data: Dict[str, Any]) -> Optional['Purchase']:
+        """Create a new purchase record"""
+        try:
+            from .models import Purchase
+            
+            # Validate required fields - now supporting both old and new format
+            if "items" in purchase_data and purchase_data["items"]:
+                # New format with items and quantities
+                required_fields = ["amount", "camp_id", "items", "sold_by"]
+                for field in required_fields:
+                    if field not in purchase_data or purchase_data[field] is None:
+                        raise ValueError(f"Missing required field: {field}")
+
+                # Validate items structure
+                if not isinstance(purchase_data["items"], list) or len(purchase_data["items"]) == 0:
+                    raise ValueError("Items must be a non-empty list")
+
+                # Validate each item
+                inventory_ids = []
+                total_quantity = 0
+                for item in purchase_data["items"]:
+                    if not isinstance(item, dict):
+                        raise ValueError("Each item must be a dictionary")
+                    if "inventory_id" not in item or "quantity" not in item:
+                        raise ValueError("Each item must have inventory_id and quantity")
+                    if not isinstance(item["quantity"], int) or item["quantity"] < 1:
+                        raise ValueError("Quantity must be a positive integer")
+                    
+                    # Validate inventory exists
+                    inventory_svc = InventoryService()
+                    inventory = inventory_svc.get_inventory_by_id(item["inventory_id"], purchase_data["camp_id"])
+                    if not inventory:
+                        raise ValueError(f"Inventory item {item['inventory_id']} not found")
+                    
+                    # Check if enough quantity is available
+                    if inventory.quantity < item["quantity"]:
+                        raise ValueError(f"Not enough quantity available for {inventory.name}. Available: {inventory.quantity}, Requested: {item['quantity']}")
+                    
+                    inventory_ids.append(item["inventory_id"])
+                    total_quantity += item["quantity"]
+
+                # Create backward-compatible inventory_ids string
+                purchase_data["inventory_ids"] = ",".join(inventory_ids)
+                
+                # Update inventory quantities
+                inventory_svc = InventoryService()
+                for item in purchase_data["items"]:
+                    inventory = inventory_svc.get_inventory_by_id(item["inventory_id"], purchase_data["camp_id"])
+                    inventory.quantity -= item["quantity"]
+
+            else:
+                # Old format with inventory_ids string - maintain backward compatibility
+                required_fields = ["amount", "camp_id", "inventory_ids", "sold_by"]
+                for field in required_fields:
+                    if field not in purchase_data or purchase_data[field] is None:
+                        raise ValueError(f"Missing required field: {field}")
+
+                # Validate inventory_ids format (should be comma-separated string)
+                if not isinstance(purchase_data["inventory_ids"], str):
+                    raise ValueError("inventory_ids must be a comma-separated string")
+
+                # Convert old format to new format for storage
+                inventory_ids = purchase_data["inventory_ids"].split(",")
+                items = []
+                for inventory_id in inventory_ids:
+                    inventory_id = inventory_id.strip()
+                    if inventory_id:
+                        items.append({"inventory_id": inventory_id, "quantity": 1})
+                purchase_data["items"] = items
+
+            # Validate amount
+            if float(purchase_data["amount"]) <= 0:
+                raise ValueError("Amount must be greater than 0")
+
+            purchase = Purchase(**purchase_data)
+            db.session.add(purchase)
+            db.session.commit()
+
+            current_app.logger.info(
+                f"New purchase created: {purchase.amount} for camp {purchase_data['camp_id']}"
+            )
+            return purchase
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in create_purchase: {str(e)}")
+            raise Exception("Failed to create purchase due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in create_purchase: {str(e)}")
+            raise Exception("Failed to create purchase")
+
+    def update_purchase(self, purchase_id: str, update_data: Dict[str, Any], camp_id: str) -> Optional['Purchase']:
+        """Update purchase record information"""
+        try:
+            purchase = self.get_purchase_by_id(purchase_id, camp_id)
+            if not purchase:
+                return None
+
+            # Validate amount if being updated
+            if "amount" in update_data and update_data["amount"] is not None:
+                if float(update_data["amount"]) <= 0:
+                    raise ValueError("Amount must be greater than 0")
+
+            # Validate inventory_ids format if being updated
+            if "inventory_ids" in update_data and update_data["inventory_ids"] is not None:
+                if not isinstance(update_data["inventory_ids"], str):
+                    raise ValueError("inventory_ids must be a comma-separated string")
+
+            # Update fields
+            updatable_fields = ["amount", "inventory_ids", "sold_by"]
+            for field in updatable_fields:
+                if field in update_data:
+                    if field == "amount" and update_data[field] is not None:
+                        setattr(purchase, field, Decimal(str(update_data[field])))
+                    else:
+                        setattr(purchase, field, update_data[field])
+
+            db.session.commit()
+
+            current_app.logger.info(f"Purchase updated: {purchase.id}")
+            return purchase
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in update_purchase: {str(e)}")
+            raise Exception("Failed to update purchase due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in update_purchase: {str(e)}")
+            raise Exception("Failed to update purchase")
+
+    def delete_purchase(self, purchase_id: str, camp_id: str) -> bool:
+        """Delete a purchase record"""
+        try:
+            purchase = self.get_purchase_by_id(purchase_id, camp_id)
+            if not purchase:
+                return False
+
+            db.session.delete(purchase)
+            db.session.commit()
+
+            current_app.logger.info(f"Purchase deleted: {purchase.id}")
+            return True
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in delete_purchase: {str(e)}")
+            raise Exception("Failed to delete purchase due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in delete_purchase: {str(e)}")
+            raise Exception("Failed to delete purchase")
+
+
+class PledgeService:
+    """Service class for pledge-related business logic"""
+
+    def get_pledge_by_id(self, pledge_id: str, camp_id: str) -> Optional[Pledge]:
+        """Get pledge record by ID"""
+        try:
+            return Pledge.query.filter_by(id=pledge_id, camp_id=camp_id).first()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_pledge_by_id: {str(e)}")
+            return None
+
+    def get_pledges_by_camp(self, camp_id: str) -> List[Pledge]:
+        """Get all pledge records for a camp"""
+        try:
+            return Pledge.query.filter_by(camp_id=camp_id).order_by(Pledge.pledge_date.desc()).all()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_pledges_by_camp: {str(e)}")
+            return []
+
+    def get_pledges_by_camper(self, camper_id: str, camp_id: str) -> List[Pledge]:
+        """Get all pledges for a specific camper"""
+        try:
+            return Pledge.query.filter_by(camper_id=camper_id, camp_id=camp_id).order_by(Pledge.pledge_date.desc()).all()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_pledges_by_camper: {str(e)}")
+            return []
+
+    def create_pledge(self, pledge_data: Dict[str, Any]) -> Optional[Pledge]:
+        """Create a new pledge record"""
+        try:
+            # Validate required fields
+            required_fields = ["amount", "camper_id", "camp_id", "status"]
+            for field in required_fields:
+                if field not in pledge_data or pledge_data[field] is None:
+                    raise ValueError(f"Missing required field: {field}")
+
+            # Validate amount
+            if float(pledge_data["amount"]) <= 0:
+                raise ValueError("Amount must be greater than 0")
+
+            # Validate status
+            valid_statuses = ['pending', 'fulfilled', 'cancelled']
+            if pledge_data["status"] not in valid_statuses:
+                raise ValueError(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+
+            # Validate camper exists and belongs to the camp
+            camper = Registration.query.filter_by(
+                id=pledge_data["camper_id"], 
+                camp_id=pledge_data["camp_id"]
+            ).first()
+            if not camper:
+                raise ValueError("Invalid camper selection or camper does not belong to this camp")
+
+            pledge = Pledge(
+                amount=Decimal(str(pledge_data["amount"])),
+                camper_id=pledge_data["camper_id"],
+                camp_id=pledge_data["camp_id"],
+                status=pledge_data["status"]
+            )
+
+            db.session.add(pledge)
+            db.session.commit()
+
+            current_app.logger.info(
+                f"New pledge created: {pledge.amount} for camper {pledge_data['camper_id']} in camp {pledge_data['camp_id']}"
+            )
+            return pledge
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in create_pledge: {str(e)}")
+            raise Exception("Failed to create pledge due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in create_pledge: {str(e)}")
+            raise Exception("Failed to create pledge")
+
+    def update_pledge(self, pledge_id: str, update_data: Dict[str, Any], camp_id: str) -> Optional[Pledge]:
+        """Update pledge record information"""
+        try:
+            pledge = self.get_pledge_by_id(pledge_id, camp_id)
+            if not pledge:
+                return None
+
+            # Validate amount if being updated
+            if "amount" in update_data and update_data["amount"] is not None:
+                if float(update_data["amount"]) <= 0:
+                    raise ValueError("Amount must be greater than 0")
+
+            # Validate status if being updated
+            if "status" in update_data:
+                valid_statuses = ['pending', 'fulfilled', 'cancelled']
+                if update_data["status"] not in valid_statuses:
+                    raise ValueError(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+
+            # Validate camper if being updated
+            if "camper_id" in update_data:
+                camper = Registration.query.filter_by(
+                    id=update_data["camper_id"], 
+                    camp_id=camp_id
+                ).first()
+                if not camper:
+                    raise ValueError("Invalid camper selection or camper does not belong to this camp")
+
+            # Update fields
+            updatable_fields = ["amount", "camper_id", "status"]
+            for field in updatable_fields:
+                if field in update_data:
+                    if field == "amount" and update_data[field] is not None:
+                        setattr(pledge, field, Decimal(str(update_data[field])))
+                    else:
+                        setattr(pledge, field, update_data[field])
+
+            db.session.commit()
+
+            current_app.logger.info(f"Pledge updated: {pledge.id}")
+            return pledge
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in update_pledge: {str(e)}")
+            raise Exception("Failed to update pledge due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in update_pledge: {str(e)}")
+            raise Exception("Failed to update pledge")
+
+    def delete_pledge(self, pledge_id: str, camp_id: str) -> bool:
+        """Delete a pledge record"""
+        try:
+            pledge = self.get_pledge_by_id(pledge_id, camp_id)
+            if not pledge:
+                return False
+
+            db.session.delete(pledge)
+            db.session.commit()
+
+            current_app.logger.info(f"Pledge deleted: {pledge.id}")
+            return True
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in delete_pledge: {str(e)}")
+            raise Exception("Failed to delete pledge due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in delete_pledge: {str(e)}")
+            raise Exception("Failed to delete pledge")
+
+    def get_camp_pledge_stats(self, camp_id: str) -> Dict[str, Any]:
+        """Get pledge statistics for a camp"""
+        try:
+            pledges = self.get_pledges_by_camp(camp_id)
+            
+            total_pledges = len(pledges)
+            total_amount = sum(float(pledge.amount) for pledge in pledges)
+            
+            pending_pledges = [p for p in pledges if p.status == 'pending']
+            fulfilled_pledges = [p for p in pledges if p.status == 'fulfilled']
+            cancelled_pledges = [p for p in pledges if p.status == 'cancelled']
+            
+            pending_amount = sum(float(pledge.amount) for pledge in pending_pledges)
+            fulfilled_amount = sum(float(pledge.amount) for pledge in fulfilled_pledges)
+            cancelled_amount = sum(float(pledge.amount) for pledge in cancelled_pledges)
+
+            return {
+                "total_pledges": total_pledges,
+                "total_amount": total_amount,
+                "pending_pledges": len(pending_pledges),
+                "pending_amount": pending_amount,
+                "fulfilled_pledges": len(fulfilled_pledges),
+                "fulfilled_amount": fulfilled_amount,
+                "cancelled_pledges": len(cancelled_pledges),
+                "cancelled_amount": cancelled_amount,
+                "fulfillment_rate": (len(fulfilled_pledges) / total_pledges * 100) if total_pledges > 0 else 0
+            }
+
+        except Exception as e:
+            current_app.logger.error(f"Error in get_camp_pledge_stats: {str(e)}")
+            return {
+                "total_pledges": 0,
+                "total_amount": 0,
+                "pending_pledges": 0,
+                "pending_amount": 0,
+                "fulfilled_pledges": 0,
+                "fulfilled_amount": 0,
+                "cancelled_pledges": 0,
+                "cancelled_amount": 0,
+                "fulfillment_rate": 0
+            }
+
+    def change_pledge_status(self, pledge_id: str, new_status: str, camp_id: str) -> Optional[Pledge]:
+        """Change the status of a pledge between pending, fulfilled, and cancelled"""
+        try:
+            pledge = self.get_pledge_by_id(pledge_id, camp_id)
+            if not pledge:
+                return None
+
+            # Validate status
+            valid_statuses = ['pending', 'fulfilled', 'cancelled']
+            if new_status not in valid_statuses:
+                raise ValueError(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+
+            # Check if status is actually changing
+            if pledge.status == new_status:
+                raise ValueError(f"Pledge is already {new_status}")
+
+            old_status = pledge.status
+            pledge.status = new_status
+
+            # If changing to fulfilled, create a financial record for income
+            if new_status == 'fulfilled' and old_status != 'fulfilled':
+                financial_service = FinancialService()
+                financial_data = {
+                    "amount": float(pledge.amount),
+                    "received_by": "System",  # You might want to pass the user who fulfilled it
+                    "transaction_type": "income",
+                    "transaction_category": "pledge",
+                    "date": datetime.now(timezone.utc),
+                    "description": f"Pledge fulfillment - {pledge.amount}",
+                    "payment_method": "other",
+                    "approved_by": "System"
+                }
+                financial_service.create_financial(financial_data, camp_id)
+
+            # If changing from fulfilled to another status, you might want to reverse the financial record
+            # This is optional based on your business logic
+            elif old_status == 'fulfilled' and new_status != 'fulfilled':
+                # Optional: Create a reversal financial record
+                financial_service = FinancialService()
+                financial_data = {
+                    "amount": float(pledge.amount),
+                    "received_by": "System",
+                    "transaction_type": "expense",
+                    "transaction_category": "other",
+                    "date": datetime.now(timezone.utc),
+                    "description": f"Pledge status change reversal - {pledge.amount}",
+                    "payment_method": "other",
+                    "approved_by": "System"
+                }
+                financial_service.create_financial(financial_data, camp_id)
+
+            db.session.commit()
+
+            current_app.logger.info(
+                f"Pledge status changed: {pledge.id} from {old_status} to {new_status}"
+            )
+            return pledge
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in change_pledge_status: {str(e)}")
+            raise Exception("Failed to change pledge status due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in change_pledge_status: {str(e)}")
+            raise Exception("Failed to change pledge status")
