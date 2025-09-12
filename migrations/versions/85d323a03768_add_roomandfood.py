@@ -83,7 +83,6 @@ def upgrade():
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('registration_id', 'camp_id', name='uq_registration_camp_allocation')
     )
-    op.drop_table('_alembic_tmp_registrations')
     # ### end Alembic commands ###
 
 
