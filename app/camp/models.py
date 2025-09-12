@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Text, JSON, String
+from sqlalchemy import Text, JSON, String, UniqueConstraint
 
 from app.extensions import db
 from app._shared.models import BaseModel
@@ -94,7 +94,7 @@ class Church(BaseModel):
     registrations = db.relationship('Registration', backref='church', lazy=True)
 
     __table_args__ = (
-        db.UniqueConstraint('name', 'district', 'area', 'camp_id', name='church_name_district_area_camp_id_unique'),
+        UniqueConstraint('name', 'district', 'area', 'camp_id', name='church_name_district_area_camp_id_unique'),
     )
 
     def to_dict(self, for_api=False, include_registrations=True):
@@ -256,6 +256,10 @@ class Registration(BaseModel):
         lazy='dynamic'
     )
     
+    # __table_args__ = (
+    #     UniqueConstraint('email', 'phone_number', 'camp_id', name='registration_email_phone_camp_unique'),
+    # )
+    
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if self.registration_date is None:
@@ -393,13 +397,18 @@ class Financial(BaseModel):
     
     # Additional important fields
     description = db.Column(db.Text)  # For detailed notes about the transaction
-    reference_number = db.Column(db.String(50), unique=True)  # For tracking/receipts
+    reference_number = db.Column(db.String(50))  # For tracking/receipts
     payment_method = db.Column(db.String(20))  # 'cash', 'check', 'momo', 'bank_transfer'
     
     # Optional fields for better tracking
     approved_by = db.Column(db.String(100))  # Who approved this transaction
     is_deleted = db.Column(db.Boolean, default=False, nullable=False)
     camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
+
+
+    __table_args__ = (
+        UniqueConstraint("reference_number", "camp_id", name="uq_reference_camp"),
+    )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

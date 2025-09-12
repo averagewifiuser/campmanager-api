@@ -39,7 +39,11 @@ class CampService:
         try:
             camp_ids = CampWorker.query.filter_by(user_id=user_id).all()
             print(camp_ids)
-            camps = Camp.query.filter(Camp.id.in_([camp.camp_id for camp in camp_ids])).order_by(Camp.created_at.desc()).all()
+            camps = (
+                Camp.query.filter(Camp.id.in_([camp.camp_id for camp in camp_ids]))
+                .order_by(Camp.created_at.desc())
+                .all()
+            )
             return camps
         except SQLAlchemyError as e:
             current_app.logger.error(f"Database error in get_user_camps: {str(e)}")
@@ -107,9 +111,9 @@ class CampService:
             db.session.commit()
 
             camp_worker = CampWorker(
-                user_id=camp_data['camp_manager_id'],
+                user_id=camp_data["camp_manager_id"],
                 camp_id=new_camp.id,
-                role='camp_manager'
+                role="camp_manager",
             )
             db.session.add(camp_worker)
             db.session.commit()
@@ -257,9 +261,7 @@ class CampService:
             )
 
             payments = Payment.query.filter_by(camp_id=camp_id).all()
-            total_revenue = sum(
-                float(payment.amount) for payment in payments
-            )
+            total_revenue = sum(float(payment.amount) for payment in payments)
 
             return {
                 "camp_id": str(camp.id),
@@ -308,22 +310,44 @@ class ChurchService:
 
             # Check for duplicate church name in the same camp
             existing_church = Church.query.filter_by(
-                name=church_data["name"].strip(), camp_id=church_data["camp_id"],
+                name=church_data["name"].strip(),
+                camp_id=church_data["camp_id"],
                 area=church_data["area"].strip() if "area" in church_data else None,
-                district=church_data["district"].strip() if "district" in church_data else None,
+                district=(
+                    church_data["district"].strip()
+                    if "district" in church_data
+                    else None
+                ),
             ).first()
 
             if existing_church:
-                existing_church.name = church_data["name"].strip() if "name" in church_data else existing_church.name
-                existing_church.area = church_data["area"].strip() if "area" in church_data else existing_church.area
-                existing_church.district = church_data["district"].strip() if "district" in church_data else existing_church.district
+                existing_church.name = (
+                    church_data["name"].strip()
+                    if "name" in church_data
+                    else existing_church.name
+                )
+                existing_church.area = (
+                    church_data["area"].strip()
+                    if "area" in church_data
+                    else existing_church.area
+                )
+                existing_church.district = (
+                    church_data["district"].strip()
+                    if "district" in church_data
+                    else existing_church.district
+                )
                 db.session.commit()
                 return existing_church
 
             new_church = Church(
-                name=church_data["name"].strip(), camp_id=church_data["camp_id"],
+                name=church_data["name"].strip(),
+                camp_id=church_data["camp_id"],
                 area=church_data["area"].strip() if "area" in church_data else None,
-                district=church_data["district"].strip() if "district" in church_data else None,
+                district=(
+                    church_data["district"].strip()
+                    if "district" in church_data
+                    else None
+                ),
             )
 
             db.session.add(new_church)
@@ -957,7 +981,7 @@ class RegistrationLinkService:
                 "expires_at",
                 "usage_limit",
                 "is_active",
-                "form_description"
+                "form_description",
             ]
             for field in updatable_fields:
                 if field in update_data:
@@ -1062,12 +1086,14 @@ class RegistrationService:
         """Get all registrations for a camp"""
         try:
             registrations = Registration.query.filter_by(camp_id=camp_id)
-            if kwargs.get('checked_in'):
+            if kwargs.get("checked_in"):
                 registrations = registrations.filter_by(checked_in=True)
-            if kwargs.get('church_id'):
-                registrations = registrations.filter_by(church_id=kwargs['church_id'])
-            if kwargs.get('category_id'):
-                registrations = registrations.filter_by(category_id=kwargs['category_id'])
+            if kwargs.get("church_id"):
+                registrations = registrations.filter_by(church_id=kwargs["church_id"])
+            if kwargs.get("category_id"):
+                registrations = registrations.filter_by(
+                    category_id=kwargs["category_id"]
+                )
             return registrations.order_by(Registration.registration_date.desc()).all()
 
         except SQLAlchemyError as e:
@@ -1201,6 +1227,23 @@ class RegistrationService:
             if not category:
                 raise ValueError("Invalid category selection")
 
+            # Check for duplicate registration (email, phone, camp_id combination)
+            email = registration_data.get("email", "").strip() if registration_data.get("email") else None
+            phone_number = registration_data["phone_number"].strip()
+            
+            if email:  # Only check for duplicates if email is provided
+                existing_registration = Registration.query.filter_by(
+                    email=email,
+                    phone_number=phone_number,
+                    camp_id=camp.id
+                ).first()
+                
+                if existing_registration:
+                    raise ValueError(
+                        f"A registration already exists for this email ({email}) and phone number ({phone_number}) combination for this camp. "
+                        f"Existing registration: {existing_registration.surname} {existing_registration.last_name}"
+                    )
+
             # If using registration link, validate category is allowed
             registration_link = None
             if link_token:
@@ -1225,10 +1268,13 @@ class RegistrationService:
                 discount = base_fee * (float(category.discount_percentage) / 100)
                 total_amount = max(0, base_fee - discount)
 
-            
             # exiting camp codes
-            campers: List[Registration] = Registration.query.filter_by(camp_id=camp.id).all()
-            existing_codes = [camper.to_dict(for_api=True)['camper_code'] for camper in campers]
+            campers: List[Registration] = Registration.query.filter_by(
+                camp_id=camp.id
+            ).all()
+            existing_codes = [
+                camper.to_dict(for_api=True)["camper_code"] for camper in campers
+            ]
 
             camper_code = self._make_code(existing_codes)
 
@@ -1289,18 +1335,17 @@ class RegistrationService:
                 f"Unexpected error in create_registration: {str(e)}"
             )
 
-   
     def _make_code(self, existing_codes: List[str]) -> str:
         import string
         import random
-        
-        letters = ''.join(random.choices(string.ascii_uppercase, k=3))
-        numbers = ''.join(random.choices(string.digits, k=3))
+
+        letters = "".join(random.choices(string.ascii_uppercase, k=3))
+        numbers = "".join(random.choices(string.digits, k=3))
         code = f"{letters}{numbers}"
 
         if code in existing_codes:
             return self._make_code(existing_codes)
-        
+
         return code
 
     def update_registration(
@@ -1521,7 +1566,9 @@ class RegistrationService:
             )
             raise Exception("Failed to update check-in status")
 
-    def get_registration_by_camper_code(self, camper_code: str) -> Optional[Registration]:
+    def get_registration_by_camper_code(
+        self, camper_code: str
+    ) -> Optional[Registration]:
         """Get registration by camper code"""
         try:
             return Registration.query.filter_by(camper_code=camper_code).first()
@@ -1533,7 +1580,7 @@ class RegistrationService:
 
     def generate_otp(self) -> str:
         """Generate a 6-digit OTP code"""
-        return ''.join(random.choices(string.digits, k=6))
+        return "".join(random.choices(string.digits, k=6))
 
     def request_otp(self, camper_code: str) -> Optional[Dict[str, Any]]:
         """Request OTP for a camper using their camper code"""
@@ -1545,11 +1592,11 @@ class RegistrationService:
 
             # Generate OTP
             otp_code = self.generate_otp()
-            
+
             # Update registration with OTP
             registration.otp_code = otp_code
             registration.otp_requested = True
-            
+
             db.session.commit()
 
             current_app.logger.info(
@@ -1562,7 +1609,7 @@ class RegistrationService:
                 "otp_code": otp_code,
                 "phone_number": registration.phone_number,
                 "email": registration.email,
-                "camper_name": f"{registration.surname} {registration.last_name}"
+                "camper_name": f"{registration.surname} {registration.last_name}",
             }
 
         except ValueError:
@@ -1595,15 +1642,19 @@ class RegistrationService:
             # Clear OTP after successful verification
             registration.otp_code = None
             registration.otp_requested = False
-            
+
             db.session.commit()
 
             # Get registration data with payments
-            registration_data = registration.to_dict(for_api=True, include_payments=True)
-            
+            registration_data = registration.to_dict(
+                for_api=True, include_payments=True
+            )
+
             # Add camp information
             # registration_data['camp'] = registration.camp.to_dict(for_api=True)
-            registration_data['church'] = registration.church.to_dict(for_api=False, include_registrations=False)
+            registration_data["church"] = registration.church.to_dict(
+                for_api=False, include_registrations=False
+            )
             # registration_data['category'] = registration.category.to_dict(for_api=True)
 
             current_app.logger.info(
@@ -1637,11 +1688,15 @@ class PaymentService:
             return payments
         except SQLAlchemyError as e:
             db.session.rollback()
-            current_app.logger.error(f"Database error in get_payments_by_camp: {str(e)}")
+            current_app.logger.error(
+                f"Database error in get_payments_by_camp: {str(e)}"
+            )
             raise Exception("Failed to get payments due to database error")
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Unexpected error in get_payments_by_camp: {str(e)}")
+            current_app.logger.error(
+                f"Unexpected error in get_payments_by_camp: {str(e)}"
+            )
             raise Exception("Failed to get payments")
 
     def get_payment_by_id(self, payment_id: str) -> Optional[Payment]:
@@ -1658,19 +1713,21 @@ class PaymentService:
             current_app.logger.error(f"Unexpected error in get_payment_by_id: {str(e)}")
             raise Exception("Failed to get payment")
 
-    def update_payment(self, payment_id: str, payment_data: Dict[str, Any]) -> Optional[Payment]:
+    def update_payment(
+        self, payment_id: str, payment_data: Dict[str, Any]
+    ) -> Optional[Payment]:
         """Update a specific payment by ID"""
         try:
             payment = Payment.query.get(payment_id)
             if not payment:
                 return None
-            
+
             # Update payment fields
             for field in payment_data:
                 setattr(payment, field, payment_data[field])
-            
+
             db.session.commit()
-            
+
             return payment
         except SQLAlchemyError as e:
             db.session.rollback()
@@ -1680,9 +1737,9 @@ class PaymentService:
             db.session.rollback()
             current_app.logger.error(f"Unexpected error in update_payment: {str(e)}")
             raise Exception("Failed to update payment")
-    
+
     def create_payment(self, payment_data: Dict[str, Any]) -> Optional[Payment]:
-        """Create a new payment"""
+        """Create a new payment with smart allocation logic"""
         try:
             # Validate required fields
             required_fields = [
@@ -1696,45 +1753,163 @@ class PaymentService:
                 if field not in payment_data:
                     raise ValueError(f"Missing required field: {field}")
 
-            
-            amount_per_registration = payment_data["amount"] / len(payment_data["registration_ids"])
+            # Get all registrations
+            registrations = []
+            for registration_id in payment_data["registration_ids"]:
+                registration = Registration.query.get(registration_id)
+                if registration:
+                    registrations.append(registration)
 
-            payments_number = Payment.query.filter_by(camp_id=payment_data["camp_id"]).count()
-            
-            payment = Payment(
-                camp_id=payment_data["camp_id"],
-                amount=amount_per_registration,
-                payment_channel=payment_data["payment_channel"],
-                recorded_by=payment_data["recorded_by"],
-                payment_reference=self.generate_payment_reference(payments_number),
-                payment_metadata=payment_data["payment_metadata"],
+            if not registrations:
+                raise ValueError("No valid registrations found")
+
+            # Calculate outstanding balances for each registration
+            registration_balances = []
+            for registration in registrations:
+                outstanding_balance = registration.get_outstanding_balance()
+                registration_balances.append({
+                    'registration': registration,
+                    'outstanding_balance': outstanding_balance
+                })
+
+            # Check if all campers owe the same amount
+            outstanding_amounts = [rb['outstanding_balance'] for rb in registration_balances]
+            all_owe_same_amount = len(set(outstanding_amounts)) == 1
+
+            # Generate financial reference
+            financials_number = Financial.query.count()
+            financials_referencee = FinancialService().generate_financial_reference(
+                financials_number
             )
+
+            # Create main financial record
             financial = Financial(
                 camp_id=payment_data["camp_id"],
-                amount=amount_per_registration,
+                amount=payment_data["amount"],
                 received_by=payment_data["recorded_by"],
                 transaction_type="income",
                 transaction_category="camp_payment",
                 description="Payment for camp registration",
-                reference_number=payment.payment_reference,
+                reference_number=financials_referencee,
                 payment_method=payment_data["payment_channel"],
                 approved_by=payment_data["recorded_by"],
             )
-            db.session.add(payment)
             db.session.add(financial)
 
-            # Add registrations to payment
-            for registration_id in payment_data["registration_ids"]:
-                registration = Registration.query.get(registration_id)
-                if registration:
-                    payment.registrations.append(registration)
-                    registration.has_paid = registration.is_fully_paid()
-            
+            remaining_payment_amount = float(payment_data["amount"])
+            payments_created = []
+
+            if all_owe_same_amount and outstanding_amounts[0] > 0:
+                # All campers owe the same amount - split equally and pay from least to largest balance
+                amount_per_registration = remaining_payment_amount / len(registrations)
+                
+                # Sort registrations by current balance (least to largest)
+                # Get current total payments for each registration to determine current balance
+                registration_balances_with_current = []
+                for rb in registration_balances:
+                    current_total_paid = rb['registration'].get_total_payments()
+                    registration_balances_with_current.append({
+                        'registration': rb['registration'],
+                        'outstanding_balance': rb['outstanding_balance'],
+                        'current_total_paid': current_total_paid
+                    })
+                
+                # Sort by current total paid (ascending) - least paid first
+                registration_balances_with_current.sort(key=lambda x: x['current_total_paid'])
+                
+                for rb in registration_balances_with_current:
+                    if remaining_payment_amount <= 0:
+                        break
+                        
+                    registration = rb['registration']
+                    payment_amount = min(amount_per_registration, remaining_payment_amount, rb['outstanding_balance'])
+                    
+                    if payment_amount > 0:
+                        payment = Payment(
+                            camp_id=payment_data["camp_id"],
+                            amount=payment_amount,
+                            payment_channel=payment_data["payment_channel"],
+                            recorded_by=payment_data["recorded_by"],
+                            payment_reference=financials_referencee,
+                            payment_metadata=payment_data["payment_metadata"],
+                        )
+                        db.session.add(payment)
+                        payment.registrations.append(registration)
+                        payments_created.append(payment)
+                        
+                        remaining_payment_amount -= payment_amount
+                        
+                        # Update payment status
+                        registration.has_paid = registration.is_fully_paid()
+                        
+                        # Send notification
+                        self._send_payment_notification(registration, payment_amount)
+
+            else:
+                # Different amounts owed - distribute proportionally or handle differently
+                # For now, let's use the original equal split logic
+                amount_per_registration = remaining_payment_amount / len(registrations)
+                
+                for registration in registrations:
+                    if remaining_payment_amount <= 0:
+                        break
+                        
+                    outstanding_balance = registration.get_outstanding_balance()
+                    payment_amount = min(amount_per_registration, remaining_payment_amount, outstanding_balance)
+                    
+                    if payment_amount > 0:
+                        payment = Payment(
+                            camp_id=payment_data["camp_id"],
+                            amount=payment_amount,
+                            payment_channel=payment_data["payment_channel"],
+                            recorded_by=payment_data["recorded_by"],
+                            payment_reference=financials_referencee,
+                            payment_metadata=payment_data["payment_metadata"],
+                        )
+                        db.session.add(payment)
+                        payment.registrations.append(registration)
+                        payments_created.append(payment)
+                        
+                        remaining_payment_amount -= payment_amount
+                        
+                        # Update payment status
+                        registration.has_paid = registration.is_fully_paid()
+                        
+                        # Send notification
+                        self._send_payment_notification(registration, payment_amount)
+
+            # Handle overflow - create new financial record if there's leftover money
+            if remaining_payment_amount > 0.01:  # Using small threshold to handle floating point precision
+                overflow_financial = Financial(
+                    camp_id=payment_data["camp_id"],
+                    amount=remaining_payment_amount,
+                    received_by=payment_data["recorded_by"],
+                    transaction_type="income",
+                    transaction_category="camp_payment",
+                    description=f"Overflow of Camp payment for ref {financials_referencee}",
+                    reference_number=FinancialService().generate_financial_reference(
+                        Financial.query.filter_by(camp_id=payment_data["camp_id"]).count() + 1
+                    ),
+                    payment_method=payment_data["payment_channel"],
+                    approved_by=payment_data["recorded_by"],
+                )
+                db.session.add(overflow_financial)
+                
+                current_app.logger.info(
+                    f"Created overflow financial record: {remaining_payment_amount} for reference {financials_referencee}"
+                )
+
             db.session.commit()
-            
-            return payment
+
+            # Return the first payment created, or create a dummy one if none were created
+            if payments_created:
+                return payments_created[0]
+            else:
+                # This shouldn't happen in normal cases, but just in case
+                return None
+
         except ValueError as e:
-            raise Exception("Failed to create payment due to validation error")
+            raise Exception(f"Failed to create payment due to validation error: {str(e)}")
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Database error in create_payment: {str(e)}")
@@ -1744,14 +1919,86 @@ class PaymentService:
             current_app.logger.error(f"Database error in create_payment: {str(e)}")
             raise Exception("Failed to create payment due to database error")
 
-    
     def generate_payment_reference(self, payments_number: int) -> str:
         """Generate a random payment reference"""
         payments_number += 1
         return f"{payments_number:05d}"
 
+    def _send_payment_notification(
+        self, registration: Registration, amount_received: float
+    ) -> None:
+        """Send payment notification to camper via SMS and email"""
+        try:
+            from app.integrations.sms import sms
+            from app.integrations.mailer import mailer
 
-class FinancialService:
+            # Calculate current balance
+            outstanding_balance = registration.get_outstanding_balance()
+
+            # Create notification message
+            camper_name = f"{registration.surname} {registration.last_name}"
+            camp_name = registration.camp.name
+
+            # SMS message
+            sms_message = (
+                f"Hi {camper_name}! We've received your payment of GHS {amount_received:.2f} "
+                f"for {camp_name}. Your outstanding balance is GHS {outstanding_balance:.2f}. "
+                f"See you at camp!"
+            )
+
+            # Email message
+            email_subject = f"Payment Received - {camp_name}"
+            email_message = f"""
+Dear {camper_name},
+
+We're excited to confirm that we've received your payment of GHS {amount_received:.2f} for {camp_name}!
+
+Payment Details:
+- Amount Received: GHS {amount_received:.2f}
+- Outstanding Balance: GHS {outstanding_balance:.2f}
+- Camp: {camp_name}
+- Camper Code: {registration.camper_code}
+
+{"You're all set! Your registration is fully paid." if outstanding_balance <= 0 else f"Outstanding Balance: GHS {outstanding_balance:.2f}"}
+
+We can't wait to see you at camp!
+
+Best regards,
+The Camp Management Team
+            """
+
+            # Send SMS notification
+            try:
+                if registration.phone_number:
+                    sms.send_sms(registration.phone_number, sms_message)
+                    current_app.logger.info(
+                        f"SMS notification sent to {registration.phone_number} for payment"
+                    )
+            except Exception as e:
+                current_app.logger.error(f"Failed to send SMS notification: {str(e)}")
+
+            # Send email notification
+            try:
+                if registration.email:
+                    recipients = [registration.email]
+                    mailer.send_email(
+                        recipients=recipients,
+                        subject=email_subject,
+                        text=email_message,
+                        html=False,
+                    )
+                    current_app.logger.info(
+                        f"Email notification sent to {registration.email} for payment"
+                    )
+            except Exception as e:
+                current_app.logger.error(f"Failed to send email notification: {str(e)}")
+
+        except Exception as e:
+            current_app.logger.error(f"Error in _send_payment_notification: {str(e)}")
+            # Don't raise the exception to avoid breaking the payment creation process
+
+
+class FinancialService:  #
     """Service class for financial-related business logic"""
 
     def get_financial_by_id(self, financial_id: str) -> Optional[Financial]:
@@ -1762,7 +2009,9 @@ class FinancialService:
             current_app.logger.error(f"Database error in get_financial_by_id: {str(e)}")
             return None
 
-    def create_financial(self, financial_data: Dict[str, Any], camp_id: str) -> Optional[Financial]:
+    def create_financial(
+        self, financial_data: Dict[str, Any], camp_id: str
+    ) -> Optional[Financial]:
         """Create a new financial record"""
         try:
             # Validate required fields
@@ -1773,33 +2022,56 @@ class FinancialService:
                 "transaction_category",
                 "date",
                 "description",
-                "payment_method"
+                "payment_method",
             ]
             for field in required_fields:
                 if field not in financial_data or financial_data[field] is None:
                     raise ValueError(f"Missing required field: {field}")
 
             # Validate transaction type
-            valid_transaction_types = ['income', 'expense']
+            valid_transaction_types = ["income", "expense"]
             if financial_data["transaction_type"] not in valid_transaction_types:
-                raise ValueError(f"Invalid transaction type. Must be one of: {', '.join(valid_transaction_types)}")
+                raise ValueError(
+                    f"Invalid transaction type. Must be one of: {', '.join(valid_transaction_types)}"
+                )
 
             # Validate transaction category
-            valid_categories = ['offering', 'sales', 'donation', 'camp_payment', 'camp_expense', 'other', 'pledge']
+            valid_categories = [
+                "offering",
+                "sales",
+                "donation",
+                "camp_payment",
+                "camp_expense",
+                "other",
+                "pledge",
+            ]
             if financial_data["transaction_category"] not in valid_categories:
-                raise ValueError(f"Invalid transaction category. Must be one of: {', '.join(valid_categories)}")
+                raise ValueError(
+                    f"Invalid transaction category. Must be one of: {', '.join(valid_categories)}"
+                )
 
             # Validate payment method
-            valid_payment_methods = ['cash', 'check', 'momo', 'bank_transfer', 'card', 'other']
+            valid_payment_methods = [
+                "cash",
+                "check",
+                "momo",
+                "bank_transfer",
+                "card",
+                "other",
+            ]
             if financial_data["payment_method"] not in valid_payment_methods:
-                raise ValueError(f"Invalid payment method. Must be one of: {', '.join(valid_payment_methods)}")
+                raise ValueError(
+                    f"Invalid payment method. Must be one of: {', '.join(valid_payment_methods)}"
+                )
 
             # Validate amount
             if float(financial_data["amount"]) <= 0:
                 raise ValueError("Amount must be greater than 0")
 
             financials_number = Financial.query.filter_by(camp_id=camp_id).count()
-            financial_data["reference_number"] = self.generate_financial_reference(financials_number)
+            financial_data["reference_number"] = self.generate_financial_reference(
+                financials_number
+            )
             financial_data["is_deleted"] = False
             financial_data["camp_id"] = camp_id
 
@@ -1831,19 +2103,31 @@ class FinancialService:
     def get_financials_by_camp(self, camp_id: str) -> List[Financial]:
         """Get all financial records for a camp"""
         try:
-            financials = Financial.query.filter_by(camp_id=camp_id, is_deleted=False).order_by(Financial.date.desc()).all()
+            financials = (
+                Financial.query.filter_by(camp_id=camp_id, is_deleted=False)
+                .order_by(Financial.date.desc())
+                .all()
+            )
             for financial in financials:
                 user = User.query.get(financial.received_by)
-                financial.received_by = user.full_name if user else financial.received_by
+                financial.received_by = (
+                    user.full_name if user else financial.received_by
+                )
             return financials
         except SQLAlchemyError as e:
-            current_app.logger.error(f"Database error in get_financials_by_camp: {str(e)}")
+            current_app.logger.error(
+                f"Database error in get_financials_by_camp: {str(e)}"
+            )
             raise Exception("Failed to get financial records due to database error")
         except Exception as e:
-            current_app.logger.error(f"Unexpected error in get_financials_by_camp: {str(e)}")
+            current_app.logger.error(
+                f"Unexpected error in get_financials_by_camp: {str(e)}"
+            )
             raise Exception("Failed to get financial records")
 
-    def update_financial(self, financial_id: str, update_data: Dict[str, Any]) -> Optional[Financial]:
+    def update_financial(
+        self, financial_id: str, update_data: Dict[str, Any]
+    ) -> Optional[Financial]:
         """Update financial record information"""
         try:
             financial = self.get_financial_by_id(financial_id)
@@ -1852,21 +2136,41 @@ class FinancialService:
 
             # Validate transaction type if being updated
             if "transaction_type" in update_data:
-                valid_transaction_types = ['income', 'expense']
+                valid_transaction_types = ["income", "expense"]
                 if update_data["transaction_type"] not in valid_transaction_types:
-                    raise ValueError(f"Invalid transaction type. Must be one of: {', '.join(valid_transaction_types)}")
+                    raise ValueError(
+                        f"Invalid transaction type. Must be one of: {', '.join(valid_transaction_types)}"
+                    )
 
             # Validate transaction category if being updated
             if "transaction_category" in update_data:
-                valid_categories = ['offering', 'sales', 'donation', 'camp_payment', 'camp_expense', 'other']
+                valid_categories = [
+                    "offering",
+                    "sales",
+                    "donation",
+                    "camp_payment",
+                    "camp_expense",
+                    "other",
+                ]
                 if update_data["transaction_category"] not in valid_categories:
-                    raise ValueError(f"Invalid transaction category. Must be one of: {', '.join(valid_categories)}")
+                    raise ValueError(
+                        f"Invalid transaction category. Must be one of: {', '.join(valid_categories)}"
+                    )
 
             # Validate payment method if being updated
             if "payment_method" in update_data:
-                valid_payment_methods = ['cash', 'check', 'momo', 'bank_transfer', 'card', 'other']
+                valid_payment_methods = [
+                    "cash",
+                    "check",
+                    "momo",
+                    "bank_transfer",
+                    "card",
+                    "other",
+                ]
                 if update_data["payment_method"] not in valid_payment_methods:
-                    raise ValueError(f"Invalid payment method. Must be one of: {', '.join(valid_payment_methods)}")
+                    raise ValueError(
+                        f"Invalid payment method. Must be one of: {', '.join(valid_payment_methods)}"
+                    )
 
             # Validate amount if being updated
             if "amount" in update_data and update_data["amount"] is not None:
@@ -1882,7 +2186,7 @@ class FinancialService:
                 "date",
                 "description",
                 "payment_method",
-                "approved_by"
+                "approved_by",
             ]
 
             for field in updatable_fields:
@@ -1906,7 +2210,9 @@ class FinancialService:
 
             db.session.commit()
 
-            current_app.logger.info(f"Financial record updated: {financial.description}")
+            current_app.logger.info(
+                f"Financial record updated: {financial.description}"
+            )
             return financial
 
         except ValueError:
@@ -1931,7 +2237,9 @@ class FinancialService:
             financial.is_deleted = True
             db.session.commit()
 
-            current_app.logger.info(f"Financial record deleted: {financial.description}")
+            current_app.logger.info(
+                f"Financial record deleted: {financial.description}"
+            )
             return True
 
         except SQLAlchemyError as e:
@@ -1952,10 +2260,14 @@ class FinancialService:
 class InventoryService:
     """Service class for inventory-related business logic"""
 
-    def get_inventory_by_id(self, inventory_id: str, camp_id: str) -> Optional[Inventory]:
+    def get_inventory_by_id(
+        self, inventory_id: str, camp_id: str
+    ) -> Optional[Inventory]:
         """Get inventory record by ID"""
         try:
-            return Inventory.query.filter_by(id=inventory_id, camp_id=camp_id, is_deleted=False).first()
+            return Inventory.query.filter_by(
+                id=inventory_id, camp_id=camp_id, is_deleted=False
+            ).first()
         except SQLAlchemyError as e:
             current_app.logger.error(f"Database error in get_inventory_by_id: {str(e)}")
             return None
@@ -1965,7 +2277,9 @@ class InventoryService:
         try:
             return Inventory.query.filter_by(camp_id=camp_id, is_deleted=False).all()
         except SQLAlchemyError as e:
-            current_app.logger.error(f"Database error in get_inventory_by_camp: {str(e)}")
+            current_app.logger.error(
+                f"Database error in get_inventory_by_camp: {str(e)}"
+            )
             return []
 
     def create_inventory(self, inventory_data: Dict[str, Any]) -> Optional[Inventory]:
@@ -1980,14 +2294,24 @@ class InventoryService:
             # Validate cost and quantity
             if float(inventory_data["cost"]) < 0:
                 raise ValueError("Cost must be non-negative")
-            
+
             if int(inventory_data["quantity"]) < 0:
                 raise ValueError("Quantity must be non-negative")
 
             # Validate inventory type
-            valid_types = ['shirts', 'hoodies', 'wristbands', 'sweat-shirts', 'keychain', 'caps', 'other']
+            valid_types = [
+                "shirts",
+                "hoodies",
+                "wristbands",
+                "sweat-shirts",
+                "keychain",
+                "caps",
+                "other",
+            ]
             if inventory_data["inventory_type"] not in valid_types:
-                raise ValueError(f"Invalid inventory type. Must be one of: {', '.join(valid_types)}")
+                raise ValueError(
+                    f"Invalid inventory type. Must be one of: {', '.join(valid_types)}"
+                )
 
             inventory_data["is_deleted"] = False
             inventory = Inventory(**inventory_data)
@@ -2010,7 +2334,9 @@ class InventoryService:
             current_app.logger.error(f"Unexpected error in create_inventory: {str(e)}")
             raise Exception("Failed to create inventory")
 
-    def update_inventory(self, inventory_id: str, update_data: Dict[str, Any], camp_id: str) -> Optional[Inventory]:
+    def update_inventory(
+        self, inventory_id: str, update_data: Dict[str, Any], camp_id: str
+    ) -> Optional[Inventory]:
         """Update inventory record information"""
         try:
             inventory = self.get_inventory_by_id(inventory_id, camp_id)
@@ -2028,12 +2354,28 @@ class InventoryService:
 
             # Validate inventory type if being updated
             if "inventory_type" in update_data:
-                valid_types = ['shirts', 'hoodies', 'wristbands', 'sweat-shirts', 'keychain', 'caps', 'other']
+                valid_types = [
+                    "shirts",
+                    "hoodies",
+                    "wristbands",
+                    "sweat-shirts",
+                    "keychain",
+                    "caps",
+                    "other",
+                ]
                 if update_data["inventory_type"] not in valid_types:
-                    raise ValueError(f"Invalid inventory type. Must be one of: {', '.join(valid_types)}")
+                    raise ValueError(
+                        f"Invalid inventory type. Must be one of: {', '.join(valid_types)}"
+                    )
 
             # Update fields
-            updatable_fields = ["cost", "name", "description", "inventory_type", "quantity"]
+            updatable_fields = [
+                "cost",
+                "name",
+                "description",
+                "inventory_type",
+                "quantity",
+            ]
             for field in updatable_fields:
                 if field in update_data:
                     if field == "cost" and update_data[field] is not None:
@@ -2092,33 +2434,43 @@ class InventoryService:
 class PurchaseService:
     """Service class for purchase-related business logic"""
 
-    def get_purchase_by_id(self, purchase_id: str, camp_id: str) -> Optional['Purchase']:
+    def get_purchase_by_id(
+        self, purchase_id: str, camp_id: str
+    ) -> Optional["Purchase"]:
         """Get purchase record by ID"""
         try:
             from .models import Purchase
+
             return Purchase.query.filter_by(id=purchase_id, camp_id=camp_id).first()
         except SQLAlchemyError as e:
             current_app.logger.error(f"Database error in get_purchase_by_id: {str(e)}")
             return None
 
-    def get_purchases_by_camp(self, camp_id: str) -> List['Purchase']:
+    def get_purchases_by_camp(self, camp_id: str) -> List["Purchase"]:
         """Get all purchase records for a camp"""
         try:
             from .models import Purchase
-            purchases = Purchase.query.filter_by(camp_id=camp_id).order_by(Purchase.purchase_date.desc()).all()
+
+            purchases = (
+                Purchase.query.filter_by(camp_id=camp_id)
+                .order_by(Purchase.purchase_date.desc())
+                .all()
+            )
             for purchase in purchases:
                 user = User.query.get(purchase.sold_by)
                 purchase.sold_by = user.full_name if user else purchase.sold_by
             return purchases
         except SQLAlchemyError as e:
-            current_app.logger.error(f"Database error in get_purchases_by_camp: {str(e)}")
+            current_app.logger.error(
+                f"Database error in get_purchases_by_camp: {str(e)}"
+            )
             return []
 
-    def create_purchase(self, purchase_data: Dict[str, Any]) -> Optional['Purchase']:
+    def create_purchase(self, purchase_data: Dict[str, Any]) -> Optional["Purchase"]:
         """Create a new purchase record"""
         try:
             from .models import Purchase
-            
+
             # Validate required fields - now supporting both old and new format
             if "items" in purchase_data and purchase_data["items"]:
                 # New format with items and quantities
@@ -2128,7 +2480,10 @@ class PurchaseService:
                         raise ValueError(f"Missing required field: {field}")
 
                 # Validate items structure
-                if not isinstance(purchase_data["items"], list) or len(purchase_data["items"]) == 0:
+                if (
+                    not isinstance(purchase_data["items"], list)
+                    or len(purchase_data["items"]) == 0
+                ):
                     raise ValueError("Items must be a non-empty list")
 
                 # Validate each item
@@ -2138,30 +2493,40 @@ class PurchaseService:
                     if not isinstance(item, dict):
                         raise ValueError("Each item must be a dictionary")
                     if "inventory_id" not in item or "quantity" not in item:
-                        raise ValueError("Each item must have inventory_id and quantity")
+                        raise ValueError(
+                            "Each item must have inventory_id and quantity"
+                        )
                     if not isinstance(item["quantity"], int) or item["quantity"] < 1:
                         raise ValueError("Quantity must be a positive integer")
-                    
+
                     # Validate inventory exists
                     inventory_svc = InventoryService()
-                    inventory = inventory_svc.get_inventory_by_id(item["inventory_id"], purchase_data["camp_id"])
+                    inventory = inventory_svc.get_inventory_by_id(
+                        item["inventory_id"], purchase_data["camp_id"]
+                    )
                     if not inventory:
-                        raise ValueError(f"Inventory item {item['inventory_id']} not found")
-                    
+                        raise ValueError(
+                            f"Inventory item {item['inventory_id']} not found"
+                        )
+
                     # Check if enough quantity is available
                     if inventory.quantity < item["quantity"]:
-                        raise ValueError(f"Not enough quantity available for {inventory.name}. Available: {inventory.quantity}, Requested: {item['quantity']}")
-                    
+                        raise ValueError(
+                            f"Not enough quantity available for {inventory.name}. Available: {inventory.quantity}, Requested: {item['quantity']}"
+                        )
+
                     inventory_ids.append(item["inventory_id"])
                     total_quantity += item["quantity"]
 
                 # Create backward-compatible inventory_ids string
                 purchase_data["inventory_ids"] = ",".join(inventory_ids)
-                
+
                 # Update inventory quantities
                 inventory_svc = InventoryService()
                 for item in purchase_data["items"]:
-                    inventory = inventory_svc.get_inventory_by_id(item["inventory_id"], purchase_data["camp_id"])
+                    inventory = inventory_svc.get_inventory_by_id(
+                        item["inventory_id"], purchase_data["camp_id"]
+                    )
                     inventory.quantity -= item["quantity"]
 
             else:
@@ -2208,7 +2573,9 @@ class PurchaseService:
             current_app.logger.error(f"Unexpected error in create_purchase: {str(e)}")
             raise Exception("Failed to create purchase")
 
-    def update_purchase(self, purchase_id: str, update_data: Dict[str, Any], camp_id: str) -> Optional['Purchase']:
+    def update_purchase(
+        self, purchase_id: str, update_data: Dict[str, Any], camp_id: str
+    ) -> Optional["Purchase"]:
         """Update purchase record information"""
         try:
             purchase = self.get_purchase_by_id(purchase_id, camp_id)
@@ -2221,7 +2588,10 @@ class PurchaseService:
                     raise ValueError("Amount must be greater than 0")
 
             # Validate inventory_ids format if being updated
-            if "inventory_ids" in update_data and update_data["inventory_ids"] is not None:
+            if (
+                "inventory_ids" in update_data
+                and update_data["inventory_ids"] is not None
+            ):
                 if not isinstance(update_data["inventory_ids"], str):
                     raise ValueError("inventory_ids must be a comma-separated string")
 
@@ -2287,7 +2657,11 @@ class PledgeService:
     def get_pledges_by_camp(self, camp_id: str) -> List[Pledge]:
         """Get all pledge records for a camp"""
         try:
-            return Pledge.query.filter_by(camp_id=camp_id).order_by(Pledge.pledge_date.desc()).all()
+            return (
+                Pledge.query.filter_by(camp_id=camp_id)
+                .order_by(Pledge.pledge_date.desc())
+                .all()
+            )
         except SQLAlchemyError as e:
             current_app.logger.error(f"Database error in get_pledges_by_camp: {str(e)}")
             return []
@@ -2295,9 +2669,15 @@ class PledgeService:
     def get_pledges_by_camper(self, camper_id: str, camp_id: str) -> List[Pledge]:
         """Get all pledges for a specific camper"""
         try:
-            return Pledge.query.filter_by(camper_id=camper_id, camp_id=camp_id).order_by(Pledge.pledge_date.desc()).all()
+            return (
+                Pledge.query.filter_by(camper_id=camper_id, camp_id=camp_id)
+                .order_by(Pledge.pledge_date.desc())
+                .all()
+            )
         except SQLAlchemyError as e:
-            current_app.logger.error(f"Database error in get_pledges_by_camper: {str(e)}")
+            current_app.logger.error(
+                f"Database error in get_pledges_by_camper: {str(e)}"
+            )
             return []
 
     def create_pledge(self, pledge_data: Dict[str, Any]) -> Optional[Pledge]:
@@ -2314,23 +2694,26 @@ class PledgeService:
                 raise ValueError("Amount must be greater than 0")
 
             # Validate status
-            valid_statuses = ['pending', 'fulfilled', 'cancelled']
+            valid_statuses = ["pending", "fulfilled", "cancelled"]
             if pledge_data["status"] not in valid_statuses:
-                raise ValueError(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+                raise ValueError(
+                    f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+                )
 
             # Validate camper exists and belongs to the camp
             camper = Registration.query.filter_by(
-                id=pledge_data["camper_id"], 
-                camp_id=pledge_data["camp_id"]
+                id=pledge_data["camper_id"], camp_id=pledge_data["camp_id"]
             ).first()
             if not camper:
-                raise ValueError("Invalid camper selection or camper does not belong to this camp")
+                raise ValueError(
+                    "Invalid camper selection or camper does not belong to this camp"
+                )
 
             pledge = Pledge(
                 amount=Decimal(str(pledge_data["amount"])),
                 camper_id=pledge_data["camper_id"],
                 camp_id=pledge_data["camp_id"],
-                status=pledge_data["status"]
+                status=pledge_data["status"],
             )
 
             db.session.add(pledge)
@@ -2352,7 +2735,9 @@ class PledgeService:
             current_app.logger.error(f"Unexpected error in create_pledge: {str(e)}")
             raise Exception("Failed to create pledge")
 
-    def update_pledge(self, pledge_id: str, update_data: Dict[str, Any], camp_id: str) -> Optional[Pledge]:
+    def update_pledge(
+        self, pledge_id: str, update_data: Dict[str, Any], camp_id: str
+    ) -> Optional[Pledge]:
         """Update pledge record information"""
         try:
             pledge = self.get_pledge_by_id(pledge_id, camp_id)
@@ -2366,18 +2751,21 @@ class PledgeService:
 
             # Validate status if being updated
             if "status" in update_data:
-                valid_statuses = ['pending', 'fulfilled', 'cancelled']
+                valid_statuses = ["pending", "fulfilled", "cancelled"]
                 if update_data["status"] not in valid_statuses:
-                    raise ValueError(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+                    raise ValueError(
+                        f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+                    )
 
             # Validate camper if being updated
             if "camper_id" in update_data:
                 camper = Registration.query.filter_by(
-                    id=update_data["camper_id"], 
-                    camp_id=camp_id
+                    id=update_data["camper_id"], camp_id=camp_id
                 ).first()
                 if not camper:
-                    raise ValueError("Invalid camper selection or camper does not belong to this camp")
+                    raise ValueError(
+                        "Invalid camper selection or camper does not belong to this camp"
+                    )
 
             # Update fields
             updatable_fields = ["amount", "camper_id", "status"]
@@ -2430,14 +2818,14 @@ class PledgeService:
         """Get pledge statistics for a camp"""
         try:
             pledges = self.get_pledges_by_camp(camp_id)
-            
+
             total_pledges = len(pledges)
             total_amount = sum(float(pledge.amount) for pledge in pledges)
-            
-            pending_pledges = [p for p in pledges if p.status == 'pending']
-            fulfilled_pledges = [p for p in pledges if p.status == 'fulfilled']
-            cancelled_pledges = [p for p in pledges if p.status == 'cancelled']
-            
+
+            pending_pledges = [p for p in pledges if p.status == "pending"]
+            fulfilled_pledges = [p for p in pledges if p.status == "fulfilled"]
+            cancelled_pledges = [p for p in pledges if p.status == "cancelled"]
+
             pending_amount = sum(float(pledge.amount) for pledge in pending_pledges)
             fulfilled_amount = sum(float(pledge.amount) for pledge in fulfilled_pledges)
             cancelled_amount = sum(float(pledge.amount) for pledge in cancelled_pledges)
@@ -2451,7 +2839,11 @@ class PledgeService:
                 "fulfilled_amount": fulfilled_amount,
                 "cancelled_pledges": len(cancelled_pledges),
                 "cancelled_amount": cancelled_amount,
-                "fulfillment_rate": (len(fulfilled_pledges) / total_pledges * 100) if total_pledges > 0 else 0
+                "fulfillment_rate": (
+                    (len(fulfilled_pledges) / total_pledges * 100)
+                    if total_pledges > 0
+                    else 0
+                ),
             }
 
         except Exception as e:
@@ -2465,10 +2857,12 @@ class PledgeService:
                 "fulfilled_amount": 0,
                 "cancelled_pledges": 0,
                 "cancelled_amount": 0,
-                "fulfillment_rate": 0
+                "fulfillment_rate": 0,
             }
 
-    def change_pledge_status(self, pledge_id: str, new_status: str, camp_id: str) -> Optional[Pledge]:
+    def change_pledge_status(
+        self, pledge_id: str, new_status: str, camp_id: str
+    ) -> Optional[Pledge]:
         """Change the status of a pledge between pending, fulfilled, and cancelled"""
         try:
             pledge = self.get_pledge_by_id(pledge_id, camp_id)
@@ -2476,9 +2870,11 @@ class PledgeService:
                 return None
 
             # Validate status
-            valid_statuses = ['pending', 'fulfilled', 'cancelled']
+            valid_statuses = ["pending", "fulfilled", "cancelled"]
             if new_status not in valid_statuses:
-                raise ValueError(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+                raise ValueError(
+                    f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+                )
 
             # Check if status is actually changing
             if pledge.status == new_status:
@@ -2488,7 +2884,7 @@ class PledgeService:
             pledge.status = new_status
 
             # If changing to fulfilled, create a financial record for income
-            if new_status == 'fulfilled' and old_status != 'fulfilled':
+            if new_status == "fulfilled" and old_status != "fulfilled":
                 financial_service = FinancialService()
                 financial_data = {
                     "amount": float(pledge.amount),
@@ -2498,13 +2894,13 @@ class PledgeService:
                     "date": datetime.now(timezone.utc),
                     "description": f"Pledge fulfillment - {pledge.amount}",
                     "payment_method": "other",
-                    "approved_by": "System"
+                    "approved_by": "System",
                 }
                 financial_service.create_financial(financial_data, camp_id)
 
             # If changing from fulfilled to another status, you might want to reverse the financial record
             # This is optional based on your business logic
-            elif old_status == 'fulfilled' and new_status != 'fulfilled':
+            elif old_status == "fulfilled" and new_status != "fulfilled":
                 # Optional: Create a reversal financial record
                 financial_service = FinancialService()
                 financial_data = {
@@ -2515,7 +2911,7 @@ class PledgeService:
                     "date": datetime.now(timezone.utc),
                     "description": f"Pledge status change reversal - {pledge.amount}",
                     "payment_method": "other",
-                    "approved_by": "System"
+                    "approved_by": "System",
                 }
                 financial_service.create_financial(financial_data, camp_id)
 
@@ -2530,9 +2926,13 @@ class PledgeService:
             raise
         except SQLAlchemyError as e:
             db.session.rollback()
-            current_app.logger.error(f"Database error in change_pledge_status: {str(e)}")
+            current_app.logger.error(
+                f"Database error in change_pledge_status: {str(e)}"
+            )
             raise Exception("Failed to change pledge status due to database error")
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Unexpected error in change_pledge_status: {str(e)}")
+            current_app.logger.error(
+                f"Unexpected error in change_pledge_status: {str(e)}"
+            )
             raise Exception("Failed to change pledge status")

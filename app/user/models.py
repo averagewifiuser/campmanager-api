@@ -29,3 +29,6 @@ class User(BaseModel):
         data = super().to_dict(for_api=for_api)
         data.pop('password_hash', None)
         return data
+
+    def __repr__(self):
+        return f"User(id={self.id}, email={self.email}, full_name={self.full_name}, role={self.role})"

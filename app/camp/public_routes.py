@@ -82,7 +82,7 @@ def get_registration_form_by_token(link_token):
 
 @public_bp.post('/<link_token>')
 @public_bp.input(RegistrationCreateRequestSchema)
-@public_bp.output(RegistrationResponseWrapperSchema, status_code=201)
+# @public_bp.output(RegistrationResponseWrapperSchema, status_code=201)
 @public_bp.doc(
     summary='Submit category-specific registration',
     description='Submit registration via category-specific registration link'
