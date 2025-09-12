@@ -11,6 +11,7 @@ class UserRegistrationSchema(Schema):
     full_name = fields.String(required=True, validate=validate.Length(min=2))
     role = fields.String(validate=validate.OneOf(['camp_manager', 'volunteer']))
     camp_id = fields.String(required=False, allow_none=True)
+    permissions = fields.List(fields.String(), required=False, allow_none=True)
 
 
 class UserLoginSchema(Schema):
@@ -24,6 +25,7 @@ class UserResponseSchema(BaseResponseSchema):
     email = fields.Email()
     full_name = fields.String()
     role = fields.String()
+    permissions = fields.List(fields.String())
 
 
 # Specific Request Wrappers

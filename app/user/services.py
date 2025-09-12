@@ -118,7 +118,8 @@ class UserService:
                 new_camp_worker = CampWorker(
                     user_id=new_user.id,
                     camp_id=user_data['camp_id'],
-                    role=user_data.get('role', 'volunteer')
+                    role=user_data.get('role', 'volunteer'),
+                    permissions=user_data.get('permissions', ['food_allocations'])
                 )
                 db.session.add(new_camp_worker)
                 db.session.commit()

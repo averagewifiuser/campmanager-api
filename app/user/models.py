@@ -11,6 +11,8 @@ class User(BaseModel):
     full_name = db.Column(db.String(255), nullable=False)
     role = db.Column(db.Enum('camp_manager', 'volunteer', name='user_roles'), 
                     default='camp_manager', nullable=False)
+    permissions = db.Column(db.JSON, 
+                            default=[], nullable=False)
     
     # Relationships
     # expenses = db.relationship('Expense', backref='manager', lazy=True)
