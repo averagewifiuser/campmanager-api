@@ -586,7 +586,7 @@ class RoomAllocation(BaseModel):
     allocator = db.relationship('User', backref='room_allocations', lazy=True)
 
     __table_args__ = (
-        UniqueConstraint("registration_id", "camp_id", name="uq_registration_camp_allocation"),
+        UniqueConstraint("registration_id", "camp_id", "is_active", name="uq_registration_camp_allocation"),
     )
 
     def __repr__(self):

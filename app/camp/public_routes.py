@@ -148,13 +148,27 @@ def submit_registration_by_token(link_token, json_data):
         sms_message = f'''
         Hi {new_registration.surname}! Your registration for {camp.name} is confirmed. Camper Code: {new_registration.camper_code}. Start: {camp.start_date}. For help, contact support@campmanager.com.
         '''
-        mailer.send_email(
-            recipients=[new_registration.email],
-            subject='Registration Successful',
-            text=message,
-            html=True,
-        )
-        sms.send_sms(new_registration.phone_number, sms_message)
+        # Send notifications in threads
+        from app.integrations.threading_utils import threaded_service, send_sms_threaded, send_email_threaded
+        
+        if new_registration.email:
+            threaded_service.execute_in_thread(
+                send_email_threaded,
+                mailer,
+                [new_registration.email],
+                'Registration Successful',
+                message,
+                None,
+                True
+            )
+        
+        if new_registration.phone_number:
+            threaded_service.execute_in_thread(
+                send_sms_threaded,
+                sms,
+                new_registration.phone_number,
+                sms_message
+            )
         return {
             'data': new_registration.to_dict()
         }, 201
@@ -303,17 +317,28 @@ def request_otp(json_data):
         # Email message
         email_message = render_template('otp-verification.html', otp_data=otp_data, camp=camp)
         
+        # Send notifications in threads
+        from app.integrations.threading_utils import threaded_service, send_sms_threaded, send_email_threaded
+        
         # Send SMS
         if otp_data['phone_number']:
-            sms.send_sms(otp_data['phone_number'], sms_message)
+            threaded_service.execute_in_thread(
+                send_sms_threaded,
+                sms,
+                otp_data['phone_number'],
+                sms_message
+            )
         
         # Send Email
         if otp_data['email']:
-            mailer.send_email(
-                recipients=[otp_data['email']],
-                subject=f'OTP Verification Code - {camp.name}',
-                text=email_message,
-                html=True,
+            threaded_service.execute_in_thread(
+                send_email_threaded,
+                mailer,
+                [otp_data['email']],
+                f'OTP Verification Code - {camp.name}',
+                email_message,
+                None,
+                True
             )
         
         return {

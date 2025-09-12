@@ -3,6 +3,7 @@ import qrcode.image.svg
 from io import BytesIO
 import base64
 import json
+import os
 from flask import current_app
 
 
@@ -18,13 +19,29 @@ class QRCodeService:
         }
     
     def generate_camper_qr_data(self, camper_id: str, camper_code: str) -> str:
-        """Generate QR code data containing camper information"""
-        qr_data = {
-            'camper_id': camper_id,
-            'camper_code': camper_code,
-            'type': 'camper_identification'
-        }
-        return json.dumps(qr_data)
+        """Generate QR code data containing frontend URL for camper"""
+        try:
+            # Get frontend URL from environment
+            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173/')
+            
+            # Ensure frontend_url ends with /
+            if not frontend_url.endswith('/'):
+                frontend_url += '/'
+            
+            # Generate the URL: FRONTEND_URL/{camper_id}/qrcode
+            qr_url = f"{frontend_url}{camper_id}/qrcode"
+            
+            return qr_url
+            
+        except Exception as e:
+            current_app.logger.error(f"Error generating camper QR URL: {str(e)}")
+            # Fallback to old JSON format if there's an error
+            qr_data = {
+                'camper_id': camper_id,
+                'camper_code': camper_code,
+                'type': 'camper_identification'
+            }
+            return json.dumps(qr_data)
     
     def generate_qr_code_png_base64(self, data: str) -> str:
         """Generate QR code as base64 encoded PNG image"""

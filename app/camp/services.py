@@ -1931,11 +1931,12 @@ class PaymentService:
     def _send_payment_notification(
         self, registration: Registration, amount_received: float
     ) -> None:
-        """Send payment notification to camper via SMS and email"""
+        """Send payment notification to camper via SMS and email using threads"""
         try:
             from app.integrations.sms import sms
             from app.integrations.mailer import mailer
             from app.integrations.qr_service import qr_service
+            from app.integrations.threading_utils import threaded_service, send_sms_threaded, send_email_threaded
 
             # Calculate current balance
             outstanding_balance = registration.get_outstanding_balance()
@@ -1960,79 +1961,74 @@ class PaymentService:
                     f"See you at camp!"
                 )
 
-            # Send SMS notification
-            try:
-                if registration.phone_number:
-                    sms.send_sms(registration.phone_number, sms_message)
-                    current_app.logger.info(
-                        f"SMS notification sent to {registration.phone_number} for payment"
-                    )
-            except Exception as e:
-                current_app.logger.error(f"Failed to send SMS notification: {str(e)}")
+            # Send SMS notification in thread
+            if registration.phone_number:
+                threaded_service.execute_in_thread(
+                    send_sms_threaded, 
+                    sms, 
+                    registration.phone_number, 
+                    sms_message
+                )
 
-            # Send email notification
-            try:
-                if registration.email:
-                    recipients = [registration.email]
-                    
-                    if is_fully_paid:
-                        # Send QR code email for fully paid campers
-                        try:
-                            # Generate QR code
-                            qr_code_html = qr_service.generate_camper_qr_code(
-                                str(registration.id), 
-                                registration.camper_code, 
-                                'html'
-                            )
-                            
-                            # Prepare template context
-                            template_context = {
-                                'camp_name': camp_name,
-                                'camper_name': camper_name,
-                                'camper_code': registration.camper_code,
-                                'total_amount': f"{float(registration.total_amount):.2f}",
-                                'camp_start_date': registration.camp.start_date.strftime('%B %d, %Y'),
-                                'camp_end_date': registration.camp.end_date.strftime('%B %d, %Y'),
-                                'camp_location': registration.camp.location,
-                                'qr_code_html': qr_code_html,
-                                'support_email': 'support@wedidtech.com'
-                            }
-                            
-                            # Generate HTML email content
-                            html_content = mailer.generate_email_text('qr-code-email.html', template_context)
-                            
-                            # Send QR code email
-                            email_subject = f"🎉 Payment Complete + QR Code - {camp_name}"
-                            mailer.send_email(
-                                recipients=recipients,
-                                subject=email_subject,
-                                text=html_content,
-                                html=True,
-                            )
-                            
-                            current_app.logger.info(
-                                f"QR code email sent to {registration.email} for fully paid registration"
-                            )
-                            
-                        except Exception as qr_error:
-                            current_app.logger.error(f"Failed to send QR code email: {str(qr_error)}")
-                            # Fallback to regular payment email
-                            self._send_regular_payment_email(registration, amount_received, outstanding_balance, recipients, camp_name, camper_name)
-                    else:
-                        # Send regular payment notification email
-                        self._send_regular_payment_email(registration, amount_received, outstanding_balance, recipients, camp_name, camper_name)
+            # Send email notification in thread
+            if registration.email:
+                recipients = [registration.email]
+                
+                if is_fully_paid:
+                    # Send QR code email for fully paid campers
+                    try:
+                        # Generate QR code
+                        qr_code_html = qr_service.generate_camper_qr_code(
+                            str(registration.id), 
+                            registration.camper_code, 
+                            'html'
+                        )
                         
-            except Exception as e:
-                current_app.logger.error(f"Failed to send email notification: {str(e)}")
+                        # Prepare template context
+                        template_context = {
+                            'camp_name': camp_name,
+                            'camper_name': camper_name,
+                            'camper_code': registration.camper_code,
+                            'total_amount': f"{float(registration.total_amount):.2f}",
+                            'camp_start_date': registration.camp.start_date.strftime('%B %d, %Y'),
+                            'camp_end_date': registration.camp.end_date.strftime('%B %d, %Y'),
+                            'camp_location': registration.camp.location,
+                            'qr_code_html': qr_code_html,
+                            'support_email': 'support@wedidtech.com'
+                        }
+                        
+                        # Generate HTML email content
+                        html_content = mailer.generate_email_text('qr-code-email.html', template_context)
+                        
+                        # Send QR code email in thread
+                        email_subject = f"🎉 Payment Complete + QR Code - {camp_name}"
+                        threaded_service.execute_in_thread(
+                            send_email_threaded,
+                            mailer,
+                            recipients,
+                            email_subject,
+                            html_content,
+                            None,
+                            True
+                        )
+                        
+                    except Exception as qr_error:
+                        current_app.logger.error(f"Failed to prepare QR code email: {str(qr_error)}")
+                        # Fallback to regular payment email
+                        self._send_regular_payment_email_threaded(registration, amount_received, outstanding_balance, recipients, camp_name, camper_name)
+                else:
+                    # Send regular payment notification email
+                    self._send_regular_payment_email_threaded(registration, amount_received, outstanding_balance, recipients, camp_name, camper_name)
 
         except Exception as e:
             current_app.logger.error(f"Error in _send_payment_notification: {str(e)}")
             # Don't raise the exception to avoid breaking the payment creation process
 
-    def _send_regular_payment_email(self, registration: Registration, amount_received: float, outstanding_balance: float, recipients: list, camp_name: str, camper_name: str) -> None:
-        """Send regular payment notification email"""
+    def _send_regular_payment_email_threaded(self, registration: Registration, amount_received: float, outstanding_balance: float, recipients: list, camp_name: str, camper_name: str) -> None:
+        """Send regular payment notification email in thread"""
         try:
             from app.integrations.mailer import mailer
+            from app.integrations.threading_utils import threaded_service, send_email_threaded
             
             email_subject = f"Payment Received - {camp_name}"
             email_message = f"""
@@ -2054,14 +2050,14 @@ Best regards,
 The Camp Management Team
             """
 
-            mailer.send_email(
-                recipients=recipients,
-                subject=email_subject,
-                text=email_message,
-                html=False,
-            )
-            current_app.logger.info(
-                f"Regular payment email sent to {registration.email} for payment"
+            threaded_service.execute_in_thread(
+                send_email_threaded,
+                mailer,
+                recipients,
+                email_subject,
+                email_message,
+                None,
+                False
             )
         except Exception as e:
             current_app.logger.error(f"Failed to send regular payment email: {str(e)}")
@@ -3376,7 +3372,7 @@ class RoomAllocationService:
             if registration:
                 registration.has_checked_in = False
 
-            allocation.is_active = False
+            db.session.delete(allocation)
             db.session.commit()
 
             current_app.logger.info(f"Room deallocated: allocation {allocation.id} and registration marked as not checked in")
@@ -3392,10 +3388,11 @@ class RoomAllocationService:
             raise Exception("Failed to deallocate room")
 
     def _send_allocation_notification(self, allocation: RoomAllocation) -> None:
-        """Send room allocation notification to camper via SMS and email"""
+        """Send room allocation notification to camper via SMS and email using threads"""
         try:
             from app.integrations.sms import sms
             from app.integrations.mailer import mailer
+            from app.integrations.threading_utils import threaded_service, send_sms_threaded, send_email_threaded
 
             registration = allocation.registration
             room = allocation.room
@@ -3412,7 +3409,7 @@ class RoomAllocationService:
             sms_message = (
                 f"Hi {camper_name}! You've been allocated to {room_description} "
                 f"for {camp_name}. Your camper code is {registration.camper_code}. "
-                f"See you at camp!"
+                f"See you at service!"
             )
 
             # Email message
@@ -3430,7 +3427,6 @@ Room Details:
 
 Additional Information:
 - Room Capacity: {room.room_capacity + room.extra_beds} people
-- Room Type: {'Special Room' if room.is_special_room else 'Standard Room'}
 {f"- Notes: {allocation.notes}" if allocation.notes else ""}
 
 We're excited to have you at camp!
@@ -3439,31 +3435,27 @@ Best regards,
 The Camp Management Team
             """
 
-            # Send SMS notification
-            try:
-                if registration.phone_number:
-                    sms.send_sms(registration.phone_number, sms_message)
-                    current_app.logger.info(
-                        f"SMS notification sent to {registration.phone_number} for room allocation"
-                    )
-            except Exception as e:
-                current_app.logger.error(f"Failed to send SMS notification: {str(e)}")
+            # Send SMS notification in thread
+            if registration.phone_number:
+                threaded_service.execute_in_thread(
+                    send_sms_threaded,
+                    sms,
+                    registration.phone_number,
+                    sms_message
+                )
 
-            # Send email notification
-            try:
-                if registration.email:
-                    recipients = [registration.email]
-                    mailer.send_email(
-                        recipients=recipients,
-                        subject=email_subject,
-                        text=email_message,
-                        html=False,
-                    )
-                    current_app.logger.info(
-                        f"Email notification sent to {registration.email} for room allocation"
-                    )
-            except Exception as e:
-                current_app.logger.error(f"Failed to send email notification: {str(e)}")
+            # Send email notification in thread
+            if registration.email:
+                recipients = [registration.email]
+                threaded_service.execute_in_thread(
+                    send_email_threaded,
+                    mailer,
+                    recipients,
+                    email_subject,
+                    email_message,
+                    None,
+                    False
+                )
 
         except Exception as e:
             current_app.logger.error(f"Error in _send_allocation_notification: {str(e)}")
@@ -3611,7 +3603,11 @@ class FoodService:
             from .models import FoodAllocation
             allocations = FoodAllocation.query.filter_by(food_id=food_id).count()
             if allocations > 0:
-                raise ValueError("Cannot delete food with existing allocations")
+                allocations = FoodAllocation.query.filter_by(food_id=food_id).all()
+                for allocation in allocations:
+                    db.session.delete(allocation)
+                # db.session.commit()
+                # raise ValueError("Cannot delete food with existing allocations")
 
             db.session.delete(food)
             db.session.commit()
@@ -3745,6 +3741,8 @@ class FoodAllocationService:
             # Check available quantity
             allocated_count = FoodAllocation.query.filter_by(food_id=food.id).count()
             available_quantity = food.quantity - allocated_count
+
+            food.quantity = food.quantity - 1
             
             if available_quantity <= 0:
                 raise ValueError(f"No more {food.name} available for allocation")

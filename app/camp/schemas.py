@@ -1211,6 +1211,7 @@ class RoomAllocationCreateSchema(Schema):
     room_id = fields.String(required=True)
     registration_ids = fields.List(fields.String(), required=True, validate=validate.Length(min=1))
     notes = fields.String()
+    is_active = fields.Boolean(required=False)
 
 
 class RoomAllocationUpdateSchema(Schema):
