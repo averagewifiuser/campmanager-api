@@ -253,8 +253,12 @@ def get_current_user():
                 }
             }, 404
         
+        
+        page_permissions = user.permissions
+        user = user.to_dict(for_api=True)
+        user["page_permissions"] = page_permissions
         return {
-            'data': user.to_dict(for_api=True)
+            'data': user
         }, 200
         
     except Exception as e:
