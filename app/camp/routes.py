@@ -221,12 +221,16 @@ def get_registration_link(link_id):
     summary='Get registration details',
     description='Get details of a specific registration'
 )
-@token_required
+# @token_required
 def get_registration(registration_id):
     """Get registration details"""
     try:
         # Verify user owns the camp that owns this registration
         registration = registration_service.get_registration_by_id(registration_id)
+        registration_data = registration.to_dict(include_payments=True)
+        registration_data["church"] = registration.church.to_dict(
+                for_api=False, include_registrations=False
+            )
         if not registration:
             return {
                 'data': {
@@ -248,7 +252,7 @@ def get_registration(registration_id):
         #     }, 403
         
         return {
-            'data': registration.to_dict()
+            'data': registration_data
         }, 200
         
     except Exception as e:

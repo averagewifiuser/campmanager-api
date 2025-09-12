@@ -1072,10 +1072,11 @@ class RegistrationLinkService:
 class RegistrationService:
     """Service class for registration-related business logic"""
 
-    def get_registration_by_id(self, registration_id: str) -> Optional[Registration]:
+    def get_registration_by_id(self, registration_id: str, for_api=False) -> Optional[Registration]:
         """Get registration by ID"""
         try:
-            return Registration.query.filter_by(id=registration_id).first()
+            registration_data = Registration.query.filter_by(id=registration_id).first()
+            return registration_data
         except SQLAlchemyError as e:
             current_app.logger.error(
                 f"Database error in get_registration_by_id: {str(e)}"
@@ -1456,6 +1457,7 @@ class RegistrationService:
             current_app.logger.error(
                 f"Unexpected error in update_registration: {str(e)}"
             )
+            print(e)
             raise Exception("Failed to update registration")
 
     def cancel_registration(self, registration_id: str) -> bool:
@@ -1888,7 +1890,7 @@ class PaymentService:
                     transaction_category="camp_payment",
                     description=f"Overflow of Camp payment for ref {financials_referencee}",
                     reference_number=FinancialService().generate_financial_reference(
-                        Financial.query.filter_by(camp_id=payment_data["camp_id"]).count() + 1
+                        Financial.query.filter_by(camp_id=payment_data["camp_id"]).count() + random.randint(100, 999) + random.randint(100, 999) + random.randint(100, 999)
                     ),
                     payment_method=payment_data["payment_channel"],
                     approved_by=payment_data["recorded_by"],

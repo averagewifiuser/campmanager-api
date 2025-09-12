@@ -5,6 +5,7 @@ from .models import RegistrationLink
 from app._shared.schemas import ErrorResponseWrapperSchema
 from .schemas import (
     RegistrationCreateRequestSchema,
+    RegistrationUpdateRequestSchema,
     RegistrationResponseWrapperSchema,
     RegistrationFormResponseWrapperSchema,
     OTPRequestWrapperSchema
@@ -378,6 +379,145 @@ def verify_otp(json_data):
             'data': {
                 'code': 'OTP_VERIFY_ERROR',
                 'message': 'Failed to verify OTP',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@public_bp.get('/registration/<registration_id>')
+@public_bp.output(RegistrationResponseWrapperSchema, 200)
+@public_bp.doc(
+    summary='Get registration data',
+    description='Get registration data using registration ID. This is a public endpoint for registrations to view their own data.'
+)
+def get_registration_public(registration_id):
+    """Get registration data via public endpoint"""
+    try:
+        # Get the registration
+        registration = registration_service.get_registration_by_id(registration_id)
+        if not registration:
+            return {
+                'data': {
+                    'code': 'REGISTRATION_NOT_FOUND',
+                    'message': 'Registration not found',
+                    'details': None
+                }
+            }, 404
+
+        return {
+            'data': registration.to_dict(for_api=True, include_payments=True)
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get registration public error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_ERROR',
+                'message': 'Failed to retrieve registration',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@public_bp.get('/registration/<registration_id>/form')
+@public_bp.output(RegistrationFormResponseWrapperSchema, 200)
+@public_bp.doc(
+    summary='Get registration form data for editing',
+    description='Get form data (churches, categories, custom fields) needed to edit a registration'
+)
+def get_registration_form_data(registration_id):
+    """Get form data needed for editing a registration"""
+    try:
+        # Get the registration to get the camp_id
+        registration = registration_service.get_registration_by_id(registration_id)
+        if not registration:
+            return {
+                'data': {
+                    'code': 'REGISTRATION_NOT_FOUND',
+                    'message': 'Registration not found',
+                    'details': None
+                }
+            }, 404
+
+        # Get form data for the camp
+        form_data = registration_service.get_registration_form(str(registration.camp_id))
+        if not form_data:
+            return {
+                'data': {
+                    'code': 'FORM_DATA_UNAVAILABLE',
+                    'message': 'Form data is not available for this camp',
+                    'details': None
+                }
+            }, 404
+
+        return {
+            'data': form_data
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get registration form data error: {str(e)}")
+        return {
+            'data': {
+                'code': 'FORM_DATA_ERROR',
+                'message': 'Failed to retrieve form data',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@public_bp.put('/registration/<registration_id>')
+@public_bp.input(RegistrationUpdateRequestSchema)
+@public_bp.output(RegistrationResponseWrapperSchema, 200)
+@public_bp.doc(
+    summary='Update registration data',
+    description='Update registration data using registration ID. This is a public endpoint for registrations to edit their own data.'
+)
+def update_registration_public(registration_id, json_data):
+    """Update registration data via public endpoint"""
+    try:
+        # Get the registration to verify it exists
+        registration = registration_service.get_registration_by_id(registration_id)
+        print(registration)
+        if not registration:
+            return {
+                'data': {
+                    'code': 'REGISTRATION_NOT_FOUND',
+                    'message': 'Registration not found',
+                    'details': None
+                }
+            }, 404
+
+        # Update the registration
+        update_data = json_data['data']
+        updated_registration = registration_service.update_registration(registration_id, update_data)
+        
+        if not updated_registration:
+            return {
+                'data': {
+                    'code': 'UPDATE_FAILED',
+                    'message': 'Failed to update registration',
+                    'details': None
+                }
+            }, 500
+
+        return {
+            'data': updated_registration.to_dict(for_api=True, include_payments=True)
+        }, 200
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Update registration public error: {str(e)}")
+        return {
+            'data': {
+                'code': 'UPDATE_ERROR',
+                'message': 'Failed to update registration',
                 'details': {'error': str(e)}
             }
         }, 500
