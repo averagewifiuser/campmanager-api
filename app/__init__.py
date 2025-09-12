@@ -291,7 +291,7 @@ Rate limit headers are included in responses.
             'description': 'Development server'
         },
         {
-            'url': 'https://api.campmanager.com',
+            'url': 'https://campmanager-api.onrender.com',
             'description': 'Production server'
         }
     ]

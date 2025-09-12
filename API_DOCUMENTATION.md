@@ -4,7 +4,7 @@
 
 The CampManager API is a comprehensive camp management system designed for church camps. It provides endpoints for user authentication, camp management, registration handling, and administrative functions.
 
-**Base URL:** `http://localhost:5000` (Development) | `https://api.campmanager.com` (Production)
+**Base URL:** `http://localhost:5000` (Development) | `https://campmanager-api.onrender.comom` (Production)
 
 **API Version:** 1.0.0
 

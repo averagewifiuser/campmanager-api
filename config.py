@@ -87,7 +87,7 @@ class Config:
     ]
     SERVERS = [
         {'url': 'http://localhost:5000', 'description': 'Development server'},
-        {'url': 'https://api.campmanager.com', 'description': 'Production server'}
+        {'url': 'https://campmanager-api.onrender.com', 'description': 'Production server'}
     ]
     
     # Security config
