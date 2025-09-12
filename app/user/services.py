@@ -110,6 +110,7 @@ class UserService:
                 "room_allocations",
                 "food",
                 "food_allocations",
+                "registrations"
             ]
 
             if "permissions" in user_data:
