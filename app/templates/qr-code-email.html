@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Camp QR Code - {{ camp_name }}</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      color: #333;
+      padding: 20px;
+      background-color: #f8f8f8;
+    }
+    .container {
+      max-width: 600px;
+      margin: 20px auto;
+      background-color: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .qr-section {
+      text-align: center;
+      margin: 30px 0;
+      padding: 20px;
+      background-color: #f9f9f9;
+      border-radius: 8px;
+    }
+    .qr-code {
+      margin: 20px 0;
+    }
+    .qr-code img {
+      max-width: 200px;
+      height: auto;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border: 1px solid #ddd;
+    }
+    th {
+      background-color: #4CAF50;
+      color: white;
+    }
+    td {
+      background-color: #f9f9f9;
+    }
+    .success-badge {
+      background-color: #4CAF50;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: bold;
+      display: inline-block;
+      margin: 10px 0;
+    }
+    .instructions {
+      background-color: #e8f4fd;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+      border-left: 4px solid #2196F3;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 30px;
+      color: #666;
+      font-size: 14px;
+    }
+    a {
+      color: #007BFF;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>🎉 Payment Complete - {{ camp_name }}</h2>
+      <div class="success-badge">FULLY PAID</div>
+    </div>
+
+    <p>Dear {{ camper_name }},</p>
+
+    <p>Congratulations! Your payment for <strong>{{ camp_name }}</strong> has been completed successfully. Below is your camp QR code for easy check-in and identification.</p>
+
+    <div class="qr-section">
+      <h3>Your Camp QR Code</h3>
+      <div class="qr-code">
+        {{ qr_code_html|safe }}
+      </div>
+      <p><strong>Camper Code:</strong> {{ camper_code }}</p>
+      <p><em>Save this QR code to your phone or take a screenshot for easy access at camp!</em></p>
+    </div>
+
+    <table>
+      <tr>
+        <th>Camp Details</th>
+        <th>Information</th>
+      </tr>
+      <tr>
+        <td>Camp Name</td>
+        <td>{{ camp_name }}</td>
+      </tr>
+      <tr>
+        <td>Camper Name</td>
+        <td>{{ camper_name }}</td>
+      </tr>
+      <tr>
+        <td>Camper Code</td>
+        <td>{{ camper_code }}</td>
+      </tr>
+      <tr>
+        <td>Total Amount Paid</td>
+        <td>GHS {{ total_amount }}</td>
+      </tr>
+      <tr>
+        <td>Payment Status</td>
+        <td><span class="success-badge">FULLY PAID</span></td>
+      </tr>
+      <tr>
+        <td>Camp Start Date</td>
+        <td>{{ camp_start_date }}</td>
+      </tr>
+      <tr>
+        <td>Camp End Date</td>
+        <td>{{ camp_end_date }}</td>
+      </tr>
+      <tr>
+        <td>Camp Location</td>
+        <td>{{ camp_location }}</td>
+      </tr>
+    </table>
+
+    <div class="instructions">
+      <h4>📱 How to Use Your QR Code:</h4>
+      <ul>
+        <li>Save this email or take a screenshot of the QR code</li>
+        <li>Present the QR code during camp check-in</li>
+        <li>Camp staff can scan it for quick identification</li>
+        <li>Keep your camper code handy as backup: <strong>{{ camper_code }}</strong></li>
+      </ul>
+    </div>
+
+    <p>If you have any questions or need support, feel free to contact us at <a href="mailto:{{ support_email }}">{{ support_email }}</a>.</p>
+
+    <p>We're excited to have you at camp!</p>
+
+    <div class="footer">
+      <p>Best regards,<br>
+      <strong>Camp Management Team</strong></p>
+      <p><em>This QR code contains your camper ID and code for secure identification.</em></p>
+    </div>
+  </div>
+</body>
+</html>

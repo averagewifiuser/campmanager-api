@@ -1,6 +1,6 @@
 from apiflask import Schema
 from marshmallow import fields, validate, validates, ValidationError
-from datetime import datetime
+from datetime import datetime, date
 import re
 from decimal import Decimal
 
@@ -833,6 +833,62 @@ class PledgeListResponseWrapperSchema(Schema):
     data = fields.List(fields.Nested(PledgeResponseSchema), required=True)
 
 
+# Food Schemas
+class FoodCreateSchema(Schema):
+    """Schema for creating food"""
+    name = fields.String(required=True, validate=validate.Length(min=2, max=100))
+    quantity = fields.Integer(required=True, validate=validate.Range(min=1))
+    vendor = fields.String(required=True, validate=validate.Length(min=2, max=100))
+    date = fields.DateTime(required=True)
+    category = fields.String(required=True, validate=validate.OneOf(['lunch', 'supper', 'snacks', 'breakfast']))
+
+
+class FoodUpdateSchema(Schema):
+    """Schema for updating food"""
+    name = fields.String(validate=validate.Length(min=2, max=100))
+    quantity = fields.Integer(validate=validate.Range(min=0))
+    vendor = fields.String(validate=validate.Length(min=2, max=100))
+    date = fields.DateTime()
+    category = fields.String(validate=validate.OneOf(['lunch', 'supper', 'snacks', 'breakfast']))
+
+
+class FoodResponseSchema(BaseResponseSchema):
+    """Schema for food response"""
+    name = fields.String()
+    quantity = fields.Integer()
+    vendor = fields.String()
+    date = fields.DateTime()
+    category = fields.String()
+    camp_id = fields.String()
+    allocated_quantity = fields.Integer(required=False)
+    available_quantity = fields.Integer(required=False)
+
+
+# Food Allocation Schemas
+class FoodAllocationCreateSchema(Schema):
+    """Schema for creating food allocation"""
+    food_id = fields.String(required=True)
+    registration_id = fields.String(required=True)
+
+
+class FoodAllocationResponseSchema(BaseResponseSchema):
+    """Schema for food allocation response"""
+    food_id = fields.String()
+    registration_id = fields.String()
+    camp_id = fields.String()
+    allocated_by = fields.String()
+    allocation_date = fields.DateTime()
+    food = fields.Nested(FoodResponseSchema, required=False)
+    registration = fields.Nested(RegistrationResponseSchema, required=False)
+
+
+class BulkFoodAllocationSchema(Schema):
+    """Schema for bulk food allocation"""
+    food_id = fields.String(required=True)
+    registration_ids = fields.List(fields.String(), required=True, validate=validate.Length(min=1))
+    category_id = fields.String(required=False)  # Optional: allocate to all in category
+
+
 # Error Schema
 class ErrorSchema(Schema):
     """Schema for error responses"""
@@ -937,6 +993,28 @@ class PaymentCreateRequestSchema(Schema):
     """Wrapper for payment creation request"""
     data = fields.Nested(PaymentFormSchema, required=True)
 
+
+# Food Request Wrappers
+class FoodCreateRequestSchema(Schema):
+    """Wrapper for food creation request"""
+    data = fields.Nested(FoodCreateSchema, required=True)
+
+
+class FoodUpdateRequestSchema(Schema):
+    """Wrapper for food update request"""
+    data = fields.Nested(FoodUpdateSchema, required=True)
+
+
+class FoodAllocationCreateRequestSchema(Schema):
+    """Wrapper for food allocation creation request"""
+    data = fields.Nested(FoodAllocationCreateSchema, required=True)
+
+
+class BulkFoodAllocationRequestSchema(Schema):
+    """Wrapper for bulk food allocation request"""
+    data = fields.Nested(BulkFoodAllocationSchema, required=True)
+
+
 # Specific Response Wrappers
 class UserResponseWrapperSchema(Schema):
     """Wrapper for user response"""
@@ -983,6 +1061,17 @@ class RegistrationFormResponseWrapperSchema(Schema):
     data = fields.Nested(RegistrationFormSchema, required=True)
 
 
+# Food Response Wrappers
+class FoodResponseWrapperSchema(Schema):
+    """Wrapper for food response"""
+    data = fields.Nested(FoodResponseSchema, required=True)
+
+
+class FoodAllocationResponseWrapperSchema(Schema):
+    """Wrapper for food allocation response"""
+    data = fields.Nested(FoodAllocationResponseSchema, required=True)
+
+
 # List Response Wrappers
 class CampListResponseWrapperSchema(Schema):
     """Wrapper for camp list response"""
@@ -1023,6 +1112,16 @@ class PaymentResponseWrapperSchema(Schema):
     data = fields.Nested(PaymentResponseSchema, required=True)
 
 
+class FoodListResponseWrapperSchema(Schema):
+    """Wrapper for food list response"""
+    data = fields.List(fields.Nested(FoodResponseSchema), required=True)
+
+
+class FoodAllocationListResponseWrapperSchema(Schema):
+    """Wrapper for food allocation list response"""
+    data = fields.List(fields.Nested(FoodAllocationResponseSchema), required=True)
+
+
 class CheckedInRequestSchema(Schema):
     has_checked_in = fields.Boolean(required=True)
 
@@ -1056,3 +1155,121 @@ class FinancialResponseWrapperSchema(Schema):
 
 class FinancialListResponseWrapperSchema(Schema):
     data = fields.List(fields.Nested(FinancialResponseSchema), required=True)
+
+
+# Room Schemas
+class RoomCreateSchema(Schema):
+    """Schema for creating a room"""
+    hostel_name = fields.String(required=True, validate=validate.Length(min=1, max=100))
+    block = fields.String(validate=validate.Length(max=50))
+    room_number = fields.String(required=True, validate=validate.Length(min=1, max=20))
+    room_capacity = fields.Integer(validate=validate.Range(min=1))
+    is_special_room = fields.Boolean()
+    extra_beds = fields.Integer(validate=validate.Range(min=0))
+    room_gender = fields.String(required=True, validate=validate.OneOf(['male', 'female', 'other']))
+    is_damaged = fields.Boolean()
+    misc_info = fields.String()
+    adjoining_to = fields.String()
+
+
+class RoomUpdateSchema(Schema):
+    """Schema for updating a room"""
+    hostel_name = fields.String(validate=validate.Length(min=1, max=100))
+    block = fields.String(validate=validate.Length(max=50))
+    room_number = fields.String(validate=validate.Length(min=1, max=20))
+    room_capacity = fields.Integer(validate=validate.Range(min=1))
+    is_special_room = fields.Boolean()
+    extra_beds = fields.Integer(validate=validate.Range(min=0))
+    room_gender = fields.String(validate=validate.OneOf(['male', 'female', 'other']))
+    is_damaged = fields.Boolean()
+    misc_info = fields.String()
+    adjoining_to = fields.String()
+
+
+class RoomResponseSchema(BaseResponseSchema):
+    """Schema for room response"""
+    hostel_name = fields.String()
+    block = fields.String()
+    room_number = fields.String()
+    room_capacity = fields.Integer()
+    is_special_room = fields.Boolean()
+    extra_beds = fields.Integer()
+    room_gender = fields.String()
+    is_damaged = fields.Boolean()
+    misc_info = fields.String()
+    adjoining_to = fields.String()
+    camp_id = fields.String()
+    current_occupancy = fields.Integer()
+    available_capacity = fields.Integer()
+    is_full = fields.Boolean()
+    allocations = fields.List(fields.Dict(), required=False)
+
+
+# Room Allocation Schemas
+class RoomAllocationCreateSchema(Schema):
+    """Schema for creating a room allocation"""
+    room_id = fields.String(required=True)
+    registration_ids = fields.List(fields.String(), required=True, validate=validate.Length(min=1))
+    notes = fields.String()
+
+
+class RoomAllocationUpdateSchema(Schema):
+    """Schema for updating a room allocation"""
+    is_active = fields.Boolean()
+    notes = fields.String()
+
+
+class RoomAllocationResponseSchema(BaseResponseSchema):
+    """Schema for room allocation response"""
+    room_id = fields.String()
+    registration_id = fields.String()
+    camp_id = fields.String()
+    allocated_by = fields.String()
+    allocation_date = fields.DateTime()
+    is_active = fields.Boolean()
+    notes = fields.String()
+    room = fields.Nested(RoomResponseSchema, required=False)
+    registration = fields.Nested(RegistrationResponseSchema, required=False)
+    allocator_name = fields.String(required=False)
+
+
+# Request Wrapper Schemas
+class RoomCreateRequestSchema(Schema):
+    """Wrapper for room creation request"""
+    data = fields.Nested(RoomCreateSchema, required=True)
+
+
+class RoomUpdateRequestSchema(Schema):
+    """Wrapper for room update request"""
+    data = fields.Nested(RoomUpdateSchema, required=True)
+
+
+class RoomAllocationCreateRequestSchema(Schema):
+    """Wrapper for room allocation creation request"""
+    data = fields.Nested(RoomAllocationCreateSchema, required=True)
+
+
+class RoomAllocationUpdateRequestSchema(Schema):
+    """Wrapper for room allocation update request"""
+    data = fields.Nested(RoomAllocationUpdateSchema, required=True)
+
+
+# Response Wrapper Schemas
+class RoomResponseWrapperSchema(Schema):
+    """Wrapper for room response"""
+    data = fields.Nested(RoomResponseSchema, required=True)
+
+
+class RoomListResponseWrapperSchema(Schema):
+    """Wrapper for room list response"""
+    data = fields.List(fields.Nested(RoomResponseSchema), required=True)
+
+
+class RoomAllocationResponseWrapperSchema(Schema):
+    """Wrapper for room allocation response"""
+    data = fields.Nested(RoomAllocationResponseSchema, required=True)
+
+
+class RoomAllocationListResponseWrapperSchema(Schema):
+    """Wrapper for room allocation list response"""
+    data = fields.List(fields.Nested(RoomAllocationResponseSchema), required=True)

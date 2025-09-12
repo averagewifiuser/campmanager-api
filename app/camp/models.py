@@ -504,3 +504,154 @@ class Pledge(BaseModel):
             'camper_id': self.camper_id,
             'status': self.status,
         }
+
+
+class Room(BaseModel):
+    __tablename__ = "rooms"
+
+    hostel_name = db.Column(db.String(100), nullable=False)
+    block = db.Column(db.String(50), nullable=True)
+    room_number = db.Column(db.String(20), nullable=False)
+    room_capacity = db.Column(db.Integer, default=1)
+    is_special_room = db.Column(db.Boolean, default=False)
+    extra_beds = db.Column(db.Integer, default=0)
+    room_gender = db.Column(db.String(10), nullable=False)  # male, female, other
+    is_damaged = db.Column(db.Boolean, default=False)
+    misc_info = db.Column(db.Text, nullable=True)
+    camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
+    adjoining_to = db.Column(String(36), nullable=True, default=None)
+
+    # Relationships
+    room_allocations = db.relationship('RoomAllocation', backref='room', lazy=True, cascade='all, delete-orphan')
+
+    __table_args__ = (
+        UniqueConstraint("hostel_name", "block", "room_number", "camp_id", name="uq_room_number_camp"),
+    )
+
+    def __repr__(self):
+        return f"<Room {self.hostel_name} {self.block}-{self.room_number}>"
+
+    def get_current_occupancy(self):
+        """Get current number of campers allocated to this room"""
+        return len([allocation for allocation in self.room_allocations if allocation.is_active])
+
+    def get_available_capacity(self):
+        """Get available capacity in this room"""
+        total_capacity = self.room_capacity + self.extra_beds
+        current_occupancy = self.get_current_occupancy()
+        return max(0, total_capacity - current_occupancy)
+
+    def is_full(self):
+        """Check if room is at full capacity"""
+        return self.get_available_capacity() == 0
+
+    def to_dict(self, include_allocations=False):
+        result = {
+            "id": self.id,
+            "hostel_name": self.hostel_name,
+            "block": self.block,
+            "room_number": self.room_number,
+            "room_capacity": self.room_capacity,
+            "is_special_room": self.is_special_room,
+            "extra_beds": self.extra_beds,
+            "room_gender": self.room_gender,
+            "is_damaged": self.is_damaged,
+            "misc_info": self.misc_info,
+            "adjoining_to": self.adjoining_to,
+            "camp_id": self.camp_id,
+            "current_occupancy": self.get_current_occupancy(),
+            "available_capacity": self.get_available_capacity(),
+            "is_full": self.is_full()
+        }
+        
+        if include_allocations:
+            result["allocations"] = [allocation.to_dict() for allocation in self.room_allocations if allocation.is_active]
+        
+        return result
+
+
+class RoomAllocation(BaseModel):
+    __tablename__ = "room_allocations"
+
+    room_id = db.Column(String(36), db.ForeignKey('rooms.id'), nullable=False)
+    registration_id = db.Column(String(36), db.ForeignKey('registrations.id'), nullable=False)
+    camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
+    allocated_by = db.Column(String(36), db.ForeignKey('users.id'), nullable=False)
+    allocation_date = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    notes = db.Column(db.Text, nullable=True)
+
+    # Relationships
+    registration = db.relationship('Registration', backref='room_allocation', lazy=True)
+    allocator = db.relationship('User', backref='room_allocations', lazy=True)
+
+    __table_args__ = (
+        UniqueConstraint("registration_id", "camp_id", name="uq_registration_camp_allocation"),
+    )
+
+    def __repr__(self):
+        return f"<RoomAllocation {self.registration_id} -> {self.room_id}>"
+
+    def to_dict(self, include_details=False):
+        result = {
+            "id": self.id,
+            "room_id": self.room_id,
+            "registration_id": self.registration_id,
+            "camp_id": self.camp_id,
+            "allocated_by": self.allocated_by,
+            "allocation_date": self.allocation_date,
+            "is_active": self.is_active,
+            "notes": self.notes
+        }
+        
+        if include_details:
+            result["room"] = self.room.to_dict() if self.room else None
+            result["registration"] = self.registration.to_dict() if self.registration else None
+            result["allocator_name"] = self.allocator.full_name if self.allocator else None
+        
+        return result
+
+
+class Food(BaseModel):
+    __tablename__ = 'foods'
+    
+    name = db.Column(db.String(100), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+    vendor = db.Column(db.String(100), nullable=False)
+    date = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    category = db.Column(db.String(50), nullable=False) # Lunch, Supper, Snacks
+    camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "quantity": self.quantity,
+            "vendor": self.vendor,
+            "date": self.date,
+            "category": self.category,
+            "camp_id": self.camp_id,
+        }
+
+
+class FoodAllocation(BaseModel):
+    __tablename__ = 'food_allocations'
+    
+    food_id = db.Column(String(36), db.ForeignKey('foods.id'), nullable=False)
+    registration_id = db.Column(String(36), db.ForeignKey('registrations.id'), nullable=False)
+    camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
+    allocated_by = db.Column(String(36), db.ForeignKey('users.id'), nullable=False)
+    allocation_date = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "food_id": self.food_id,
+            "registration_id": self.registration_id,
+            "camp_id": self.camp_id,
+            "allocated_by": self.allocated_by,
+            "allocation_date": self.allocation_date,
+        }
+
+
+    

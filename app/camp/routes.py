@@ -72,9 +72,21 @@ from .schemas import (
     # Check-in Schemas
     CheckedInRequestWrapperSchema,
     RegistrationsQuerySchema,
+    
+    # Room schemas
+    RoomCreateRequestSchema,
+    RoomUpdateRequestSchema,
+    RoomResponseWrapperSchema,
+    RoomListResponseWrapperSchema,
+    
+    # Room Allocation schemas
+    RoomAllocationCreateRequestSchema,
+    RoomAllocationUpdateRequestSchema,
+    RoomAllocationResponseWrapperSchema,
+    RoomAllocationListResponseWrapperSchema,
 )
 from app._shared.schemas import SuccessMessageWrapperSchema
-from .services import CampService, ChurchService, CategoryService, CustomFieldService, RegistrationLinkService, RegistrationService, PaymentService, FinancialService, InventoryService, PurchaseService, PledgeService
+from .services import CampService, ChurchService, CategoryService, CustomFieldService, RegistrationLinkService, RegistrationService, PaymentService, FinancialService, InventoryService, PurchaseService, PledgeService, RoomService, RoomAllocationService
 from .._shared.auth import token_required, role_required, camp_owner_required, optional_auth, get_current_user
 
 
@@ -93,6 +105,8 @@ financial_service = FinancialService()
 inventory_service = InventoryService()
 purchase_service = PurchaseService()
 pledge_service = PledgeService()
+room_service = RoomService()
+room_allocation_service = RoomAllocationService()
 
 # =============================================================================
 # CAMP ROUTES
@@ -2757,6 +2771,647 @@ def change_pledge_status(pledge_id, json_data):
             'data': {
                 'code': 'CHANGE_PLEDGE_STATUS_ERROR',
                 'message': 'Failed to change pledge status',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+# =============================================================================
+# ROOM ROUTES
+# =============================================================================
+
+@camp_bp.get('/<camp_id>/rooms')
+@camp_bp.output(RoomListResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get camp rooms',
+    description='Get all rooms for a camp (Manager only)'
+)
+@token_required
+@camp_owner_required()
+def get_camp_rooms(camp_id):
+    """Get all rooms for camp"""
+    try:
+        rooms = room_service.get_camp_rooms(camp_id)
+        
+        return {
+            'data': [room.to_dict() for room in rooms]
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get rooms error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_ROOMS_ERROR',
+                'message': 'Failed to retrieve rooms',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.post('/<camp_id>/rooms')
+@camp_bp.input(RoomCreateRequestSchema)
+@camp_bp.output(RoomResponseWrapperSchema, status_code=201)
+@camp_bp.doc(
+    summary='Create room',
+    description='Create a new room for a camp'
+)
+@token_required
+@camp_owner_required()
+def create_room(camp_id, json_data):
+    """Create room"""
+    try:
+        room_data = json_data['data']
+        room_data['camp_id'] = camp_id
+        
+        new_room = room_service.create_room(room_data)
+        
+        return {
+            'data': new_room.to_dict()
+        }, 201
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Create room error: {str(e)}")
+        return {
+            'data': {
+                'code': 'CREATE_ROOM_ERROR',
+                'message': 'Failed to create room',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.get('/rooms/<room_id>')
+@camp_bp.output(RoomResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get room details',
+    description='Get details of a specific room'
+)
+@token_required
+def get_room(room_id):
+    """Get room details"""
+    try:
+        room = room_service.get_room_by_id(room_id)
+        if not room:
+            return {
+                'data': {
+                    'code': 'ROOM_NOT_FOUND',
+                    'message': 'Room not found',
+                    'details': None
+                }
+            }, 404
+        
+        # Check if user owns the camp
+        user = get_current_user()
+        # Add authorization check if needed
+        
+        return {
+            'data': room.to_dict()
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get room error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_ROOM_ERROR',
+                'message': 'Failed to retrieve room',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.put('/rooms/<room_id>')
+@camp_bp.input(RoomUpdateRequestSchema)
+@camp_bp.output(RoomResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Update room',
+    description='Update room details'
+)
+@token_required
+def update_room(room_id, json_data):
+    """Update room"""
+    try:
+        room = room_service.get_room_by_id(room_id)
+        if not room:
+            return {
+                'data': {
+                    'code': 'ROOM_NOT_FOUND',
+                    'message': 'Room not found',
+                    'details': None
+                }
+            }, 404
+        
+        # Check if user owns the camp
+        user = get_current_user()
+        # Add authorization check if needed
+        
+        update_data = json_data['data']
+        updated_room = room_service.update_room(room_id, update_data)
+        
+        return {
+            'data': updated_room.to_dict()
+        }, 200
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Update room error: {str(e)}")
+        return {
+            'data': {
+                'code': 'UPDATE_ROOM_ERROR',
+                'message': 'Failed to update room',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.delete('/rooms/<room_id>')
+@camp_bp.output(SuccessMessageWrapperSchema)
+@camp_bp.doc(
+    summary='Delete room',
+    description='Delete a room'
+)
+@token_required
+def delete_room(room_id):
+    """Delete room"""
+    try:
+        room = room_service.get_room_by_id(room_id)
+        if not room:
+            return {
+                'data': {
+                    'code': 'ROOM_NOT_FOUND',
+                    'message': 'Room not found',
+                    'details': None
+                }
+            }, 404
+        
+        # Check if user owns the camp
+        user = get_current_user()
+        # Add authorization check if needed
+        
+        success = room_service.delete_room(room_id)
+        if not success:
+            return {
+                'data': {
+                    'code': 'DELETE_FAILED',
+                    'message': 'Failed to delete room',
+                    'details': None
+                }
+            }, 400
+        
+        return {
+            'data': {
+                'message': 'Room deleted successfully'
+            }
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Delete room error: {str(e)}")
+        return {
+            'data': {
+                'code': 'DELETE_ROOM_ERROR',
+                'message': 'Failed to delete room',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.get('/<camp_id>/rooms/available')
+@camp_bp.output(RoomListResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get available rooms',
+    description='Get all available rooms for a camp with optional gender filter'
+)
+@token_required
+@camp_owner_required()
+def get_available_rooms(camp_id):
+    """Get available rooms for camp"""
+    try:
+        gender = request.args.get('gender')
+        rooms = room_service.get_available_rooms(camp_id, gender)
+        
+        return {
+            'data': [room.to_dict() for room in rooms]
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get available rooms error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_AVAILABLE_ROOMS_ERROR',
+                'message': 'Failed to retrieve available rooms',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+# =============================================================================
+# ROOM ALLOCATION ROUTES
+# =============================================================================
+
+@camp_bp.get('/<camp_id>/room-allocations')
+@camp_bp.output(RoomAllocationListResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get camp room allocations',
+    description='Get all room allocations for a camp (Manager only)'
+)
+@token_required
+@camp_owner_required()
+def get_camp_room_allocations(camp_id):
+    """Get all room allocations for camp"""
+    try:
+        allocations = room_allocation_service.get_camp_allocations(camp_id)
+        
+        return {
+            'data': [allocation.to_dict() for allocation in allocations]
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get room allocations error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_ROOM_ALLOCATIONS_ERROR',
+                'message': 'Failed to retrieve room allocations',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.post('/<camp_id>/room-allocations')
+@camp_bp.input(RoomAllocationCreateRequestSchema)
+@camp_bp.output(RoomAllocationResponseWrapperSchema, status_code=201)
+@camp_bp.doc(
+    summary='Allocate room',
+    description='Allocate a room to a camper registration'
+)
+@token_required
+@camp_owner_required()
+def allocate_room(camp_id, json_data):
+    """Allocate room to camper"""
+    try:
+        allocation_data = json_data['data']
+        allocation_data['camp_id'] = camp_id
+        
+        new_allocation = room_allocation_service.allocate_room(allocation_data)
+        
+        return {
+            'data': new_allocation.to_dict()
+        }, 201
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Allocate room error: {str(e)}")
+        return {
+            'data': {
+                'code': 'ALLOCATE_ROOM_ERROR',
+                'message': 'Failed to allocate room',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.get('/room-allocations/<allocation_id>')
+@camp_bp.output(RoomAllocationResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get room allocation details',
+    description='Get details of a specific room allocation'
+)
+@token_required
+def get_room_allocation(allocation_id):
+    """Get room allocation details"""
+    try:
+        allocation = room_allocation_service.get_allocation_by_id(allocation_id)
+        if not allocation:
+            return {
+                'data': {
+                    'code': 'ALLOCATION_NOT_FOUND',
+                    'message': 'Room allocation not found',
+                    'details': None
+                }
+            }, 404
+        
+        # Check if user owns the camp
+        user = get_current_user()
+        # Add authorization check if needed
+        
+        return {
+            'data': allocation.to_dict()
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get room allocation error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_ROOM_ALLOCATION_ERROR',
+                'message': 'Failed to retrieve room allocation',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.put('/room-allocations/<allocation_id>')
+@camp_bp.input(RoomAllocationUpdateRequestSchema)
+@camp_bp.output(RoomAllocationResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Update room allocation',
+    description='Update room allocation details'
+)
+@token_required
+def update_room_allocation(allocation_id, json_data):
+    """Update room allocation"""
+    try:
+        allocation = room_allocation_service.get_allocation_by_id(allocation_id)
+        if not allocation:
+            return {
+                'data': {
+                    'code': 'ALLOCATION_NOT_FOUND',
+                    'message': 'Room allocation not found',
+                    'details': None
+                }
+            }, 404
+        
+        # Check if user owns the camp
+        user = get_current_user()
+        # Add authorization check if needed
+        
+        update_data = json_data['data']
+        updated_allocation = room_allocation_service.update_allocation(allocation_id, update_data)
+        
+        return {
+            'data': updated_allocation.to_dict()
+        }, 200
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Update room allocation error: {str(e)}")
+        return {
+            'data': {
+                'code': 'UPDATE_ROOM_ALLOCATION_ERROR',
+                'message': 'Failed to update room allocation',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.delete('/room-allocations/<allocation_id>')
+@camp_bp.output(SuccessMessageWrapperSchema)
+@camp_bp.doc(
+    summary='Deallocate room',
+    description='Remove room allocation for a camper'
+)
+@token_required
+def deallocate_room(allocation_id):
+    """Deallocate room from camper"""
+    try:
+        allocation = room_allocation_service.get_allocation_by_id(allocation_id)
+        if not allocation:
+            return {
+                'data': {
+                    'code': 'ALLOCATION_NOT_FOUND',
+                    'message': 'Room allocation not found',
+                    'details': None
+                }
+            }, 404
+        
+        # Check if user owns the camp
+        user = get_current_user()
+        # Add authorization check if needed
+        
+        success = room_allocation_service.deallocate_room(allocation_id)
+        if not success:
+            return {
+                'data': {
+                    'code': 'DEALLOCATE_FAILED',
+                    'message': 'Failed to deallocate room',
+                    'details': None
+                }
+            }, 400
+        
+        return {
+            'data': {
+                'message': 'Room deallocated successfully'
+            }
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Deallocate room error: {str(e)}")
+        return {
+            'data': {
+                'code': 'DEALLOCATE_ROOM_ERROR',
+                'message': 'Failed to deallocate room',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+# =============================================================================
+# QR CODE ROUTES
+# =============================================================================
+
+@camp_bp.get('/registrations/<registration_id>/qr-code')
+@camp_bp.output({
+    'type': 'object',
+    'properties': {
+        'data': {
+            'type': 'object',
+            'properties': {
+                'qr_code_base64': {'type': 'string'},
+                'qr_code_svg': {'type': 'string'},
+                'qr_code_html': {'type': 'string'},
+                'camper_id': {'type': 'string'},
+                'camper_code': {'type': 'string'},
+                'camper_name': {'type': 'string'}
+            }
+        }
+    }
+})
+@camp_bp.doc(
+    summary='Generate QR code for camper',
+    description='Generate QR code for a fully paid camper registration'
+)
+def generate_camper_qr_code(registration_id):
+    """Generate QR code for a camper registration"""
+    try:
+        from app.integrations.qr_service import qr_service
+        
+        # Get registration
+        registration = registration_service.get_registration_by_id(registration_id)
+        if not registration:
+            return {
+                'data': {
+                    'code': 'REGISTRATION_NOT_FOUND',
+                    'message': 'Registration not found',
+                    'details': None
+                }
+            }, 404
+        
+        # Check if registration is fully paid
+        if not registration.is_fully_paid():
+            return {
+                'data': {
+                    'code': 'PAYMENT_INCOMPLETE',
+                    'message': 'QR code is only available for fully paid registrations',
+                    'details': {
+                        'outstanding_balance': float(registration.get_outstanding_balance()),
+                        'total_amount': float(registration.total_amount),
+                        'total_paid': registration.get_total_payments()
+                    }
+                }
+            }, 400
+        
+        # Generate QR codes in different formats
+        qr_code_base64 = qr_service.generate_camper_qr_code(
+            str(registration.id), 
+            registration.camper_code, 
+            'base64'
+        )
+        
+        qr_code_svg = qr_service.generate_camper_qr_code(
+            str(registration.id), 
+            registration.camper_code, 
+            'svg'
+        )
+        
+        qr_code_html = qr_service.generate_camper_qr_code(
+            str(registration.id), 
+            registration.camper_code, 
+            'html'
+        )
+        
+        camper_name = f"{registration.surname} {registration.last_name}"
+        
+        return {
+            'data': {
+                'qr_code_base64': qr_code_base64,
+                'qr_code_svg': qr_code_svg,
+                'qr_code_html': qr_code_html,
+                'camper_id': str(registration.id),
+                'camper_code': registration.camper_code,
+                'camper_name': camper_name
+            }
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Generate QR code error: {str(e)}")
+        return {
+            'data': {
+                'code': 'QR_CODE_GENERATION_ERROR',
+                'message': 'Failed to generate QR code',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.post('/qr-code/decode')
+@camp_bp.input({
+    'type': 'object',
+    'properties': {
+        'data': {
+            'type': 'object',
+            'properties': {
+                'qr_data': {'type': 'string', 'description': 'The QR code data string to decode'}
+            },
+            'required': ['qr_data']
+        }
+    },
+    'required': ['data']
+})
+@camp_bp.output({
+    'type': 'object',
+    'properties': {
+        'data': {
+            'type': 'object',
+            'properties': {
+                'camper_id': {'type': 'string'},
+                'camper_code': {'type': 'string'},
+                'type': {'type': 'string'},
+                'registration': {'type': 'object'}
+            }
+        }
+    }
+})
+@camp_bp.doc(
+    summary='Decode QR code data',
+    description='Decode QR code data and return camper information'
+)
+@token_required
+def decode_qr_code(json_data):
+    """Decode QR code data and return camper information"""
+    try:
+        from app.integrations.qr_service import qr_service
+        
+        qr_data = json_data['data']['qr_data']
+        
+        # Decode QR code data
+        decoded_data = qr_service.decode_camper_qr_data(qr_data)
+        
+        # Get registration information
+        registration = registration_service.get_registration_by_id(decoded_data['camper_id'])
+        if not registration:
+            return {
+                'data': {
+                    'code': 'REGISTRATION_NOT_FOUND',
+                    'message': 'Registration not found for this QR code',
+                    'details': None
+                }
+            }, 404
+        
+        # Return decoded data with registration info
+        registration_data = registration.to_dict(include_payments=True)
+        registration_data["church"] = registration.church.to_dict(
+            for_api=False, include_registrations=False
+        )
+        
+        return {
+            'data': {
+                'camper_id': decoded_data['camper_id'],
+                'camper_code': decoded_data['camper_code'],
+                'type': decoded_data['type'],
+                'registration': registration_data
+            }
+        }, 200
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'INVALID_QR_CODE',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Decode QR code error: {str(e)}")
+        return {
+            'data': {
+                'code': 'QR_CODE_DECODE_ERROR',
+                'message': 'Failed to decode QR code',
                 'details': {'error': str(e)}
             }
         }, 500

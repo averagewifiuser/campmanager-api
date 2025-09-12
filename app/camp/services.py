@@ -19,6 +19,8 @@ from .models import (
     Financial,
     Inventory,
     Pledge,
+    Room,
+    RoomAllocation,
     db,
 )
 
@@ -1933,22 +1935,105 @@ class PaymentService:
         try:
             from app.integrations.sms import sms
             from app.integrations.mailer import mailer
+            from app.integrations.qr_service import qr_service
 
             # Calculate current balance
             outstanding_balance = registration.get_outstanding_balance()
+            is_fully_paid = outstanding_balance <= 0
 
             # Create notification message
             camper_name = f"{registration.surname} {registration.last_name}"
             camp_name = registration.camp.name
 
             # SMS message
-            sms_message = (
-                f"Hi {camper_name}! We've received your payment of GHS {amount_received:.2f} "
-                f"for {camp_name}. Your outstanding balance is GHS {outstanding_balance:.2f}. "
-                f"See you at camp!"
-            )
+            if is_fully_paid:
+                sms_message = (
+                    f"🎉 Hi {camper_name}! Payment complete for {camp_name}! "
+                    f"You're fully paid (GHS {amount_received:.2f}). "
+                    f"Check your email for your QR code. Camper Code: {registration.camper_code}. "
+                    f"See you at camp!"
+                )
+            else:
+                sms_message = (
+                    f"Hi {camper_name}! We've received your payment of GHS {amount_received:.2f} "
+                    f"for {camp_name}. Your outstanding balance is GHS {outstanding_balance:.2f}. "
+                    f"See you at camp!"
+                )
 
-            # Email message
+            # Send SMS notification
+            try:
+                if registration.phone_number:
+                    sms.send_sms(registration.phone_number, sms_message)
+                    current_app.logger.info(
+                        f"SMS notification sent to {registration.phone_number} for payment"
+                    )
+            except Exception as e:
+                current_app.logger.error(f"Failed to send SMS notification: {str(e)}")
+
+            # Send email notification
+            try:
+                if registration.email:
+                    recipients = [registration.email]
+                    
+                    if is_fully_paid:
+                        # Send QR code email for fully paid campers
+                        try:
+                            # Generate QR code
+                            qr_code_html = qr_service.generate_camper_qr_code(
+                                str(registration.id), 
+                                registration.camper_code, 
+                                'html'
+                            )
+                            
+                            # Prepare template context
+                            template_context = {
+                                'camp_name': camp_name,
+                                'camper_name': camper_name,
+                                'camper_code': registration.camper_code,
+                                'total_amount': f"{float(registration.total_amount):.2f}",
+                                'camp_start_date': registration.camp.start_date.strftime('%B %d, %Y'),
+                                'camp_end_date': registration.camp.end_date.strftime('%B %d, %Y'),
+                                'camp_location': registration.camp.location,
+                                'qr_code_html': qr_code_html,
+                                'support_email': 'support@wedidtech.com'
+                            }
+                            
+                            # Generate HTML email content
+                            html_content = mailer.generate_email_text('qr-code-email.html', template_context)
+                            
+                            # Send QR code email
+                            email_subject = f"🎉 Payment Complete + QR Code - {camp_name}"
+                            mailer.send_email(
+                                recipients=recipients,
+                                subject=email_subject,
+                                text=html_content,
+                                html=True,
+                            )
+                            
+                            current_app.logger.info(
+                                f"QR code email sent to {registration.email} for fully paid registration"
+                            )
+                            
+                        except Exception as qr_error:
+                            current_app.logger.error(f"Failed to send QR code email: {str(qr_error)}")
+                            # Fallback to regular payment email
+                            self._send_regular_payment_email(registration, amount_received, outstanding_balance, recipients, camp_name, camper_name)
+                    else:
+                        # Send regular payment notification email
+                        self._send_regular_payment_email(registration, amount_received, outstanding_balance, recipients, camp_name, camper_name)
+                        
+            except Exception as e:
+                current_app.logger.error(f"Failed to send email notification: {str(e)}")
+
+        except Exception as e:
+            current_app.logger.error(f"Error in _send_payment_notification: {str(e)}")
+            # Don't raise the exception to avoid breaking the payment creation process
+
+    def _send_regular_payment_email(self, registration: Registration, amount_received: float, outstanding_balance: float, recipients: list, camp_name: str, camper_name: str) -> None:
+        """Send regular payment notification email"""
+        try:
+            from app.integrations.mailer import mailer
+            
             email_subject = f"Payment Received - {camp_name}"
             email_message = f"""
 Dear {camper_name},
@@ -1969,35 +2054,17 @@ Best regards,
 The Camp Management Team
             """
 
-            # Send SMS notification
-            try:
-                if registration.phone_number:
-                    sms.send_sms(registration.phone_number, sms_message)
-                    current_app.logger.info(
-                        f"SMS notification sent to {registration.phone_number} for payment"
-                    )
-            except Exception as e:
-                current_app.logger.error(f"Failed to send SMS notification: {str(e)}")
-
-            # Send email notification
-            try:
-                if registration.email:
-                    recipients = [registration.email]
-                    mailer.send_email(
-                        recipients=recipients,
-                        subject=email_subject,
-                        text=email_message,
-                        html=False,
-                    )
-                    current_app.logger.info(
-                        f"Email notification sent to {registration.email} for payment"
-                    )
-            except Exception as e:
-                current_app.logger.error(f"Failed to send email notification: {str(e)}")
-
+            mailer.send_email(
+                recipients=recipients,
+                subject=email_subject,
+                text=email_message,
+                html=False,
+            )
+            current_app.logger.info(
+                f"Regular payment email sent to {registration.email} for payment"
+            )
         except Exception as e:
-            current_app.logger.error(f"Error in _send_payment_notification: {str(e)}")
-            # Don't raise the exception to avoid breaking the payment creation process
+            current_app.logger.error(f"Failed to send regular payment email: {str(e)}")
 
 
 class FinancialService:  #
@@ -2938,3 +3005,972 @@ class PledgeService:
                 f"Unexpected error in change_pledge_status: {str(e)}"
             )
             raise Exception("Failed to change pledge status")
+
+
+class RoomService:
+    """Service class for room-related business logic"""
+
+    def get_room_by_id(self, room_id: str) -> Optional[Room]:
+        """Get room by ID"""
+        try:
+            return Room.query.filter_by(id=room_id).first()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_room_by_id: {str(e)}")
+            return None
+
+    def get_camp_rooms(self, camp_id: str) -> List[Room]:
+        """Get all rooms for a camp"""
+        try:
+            return Room.query.filter_by(camp_id=camp_id).order_by(Room.hostel_name, Room.block, Room.room_number).all()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_camp_rooms: {str(e)}")
+            return []
+
+    def create_room(self, room_data: Dict[str, Any]) -> Optional[Room]:
+        """Create a new room"""
+        try:
+            # Validate required fields
+            required_fields = ["hostel_name", "room_number", "room_gender", "camp_id"]
+            for field in required_fields:
+                if field not in room_data or not room_data[field]:
+                    raise ValueError(f"Missing required field: {field}")
+
+            # Validate room_gender
+            valid_genders = ["male", "female", "other"]
+            if room_data["room_gender"] not in valid_genders:
+                raise ValueError(f"Invalid room gender. Must be one of: {', '.join(valid_genders)}")
+
+            # Validate numeric fields
+            if "room_capacity" in room_data and room_data["room_capacity"] is not None:
+                if int(room_data["room_capacity"]) < 1:
+                    raise ValueError("Room capacity must be at least 1")
+
+            if "extra_beds" in room_data and room_data["extra_beds"] is not None:
+                if int(room_data["extra_beds"]) < 0:
+                    raise ValueError("Extra beds must be non-negative")
+
+            # Check for duplicate room in the same camp
+            existing_room = Room.query.filter_by(
+                hostel_name=room_data["hostel_name"].strip(),
+                block=room_data.get("block", "").strip() if room_data.get("block") else None,
+                room_number=room_data["room_number"].strip(),
+                camp_id=room_data["camp_id"]
+            ).first()
+
+            if existing_room:
+                raise ValueError("A room with this hostel name, block, and room number already exists in this camp")
+
+            new_room = Room(
+                hostel_name=room_data["hostel_name"].strip(),
+                block=room_data.get("block", "").strip() if room_data.get("block") else None,
+                room_number=room_data["room_number"].strip(),
+                room_capacity=int(room_data.get("room_capacity", 1)),
+                is_special_room=room_data.get("is_special_room", False),
+                extra_beds=int(room_data.get("extra_beds", 0)),
+                room_gender=room_data["room_gender"],
+                is_damaged=room_data.get("is_damaged", False),
+                misc_info=room_data.get("misc_info"),
+                camp_id=room_data["camp_id"],
+                adjoining_to=room_data.get("adjoining_to")
+            )
+
+            db.session.add(new_room)
+            db.session.commit()
+
+            current_app.logger.info(f"New room created: {new_room.hostel_name} {new_room.block}-{new_room.room_number} for camp {room_data['camp_id']}")
+            return new_room
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in create_room: {str(e)}")
+            raise Exception("Failed to create room due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in create_room: {str(e)}")
+            raise Exception("Failed to create room")
+
+    def update_room(self, room_id: str, update_data: Dict[str, Any]) -> Optional[Room]:
+        """Update room information"""
+        try:
+            room = self.get_room_by_id(room_id)
+            if not room:
+                return None
+
+            # Validate room_gender if being updated
+            if "room_gender" in update_data:
+                valid_genders = ["male", "female", "other"]
+                if update_data["room_gender"] not in valid_genders:
+                    raise ValueError(f"Invalid room gender. Must be one of: {', '.join(valid_genders)}")
+
+            # Validate numeric fields if being updated
+            if "room_capacity" in update_data and update_data["room_capacity"] is not None:
+                if int(update_data["room_capacity"]) < 1:
+                    raise ValueError("Room capacity must be at least 1")
+
+            if "extra_beds" in update_data and update_data["extra_beds"] is not None:
+                if int(update_data["extra_beds"]) < 0:
+                    raise ValueError("Extra beds must be non-negative")
+
+            # Check for duplicate room if key fields are being updated
+            if any(field in update_data for field in ["hostel_name", "block", "room_number"]):
+                hostel_name = update_data.get("hostel_name", room.hostel_name).strip()
+                block = update_data.get("block", room.block)
+                if block:
+                    block = block.strip()
+                room_number = update_data.get("room_number", room.room_number).strip()
+
+                existing_room = Room.query.filter_by(
+                    hostel_name=hostel_name,
+                    block=block,
+                    room_number=room_number,
+                    camp_id=room.camp_id
+                ).filter(Room.id != room_id).first()
+
+                if existing_room:
+                    raise ValueError("A room with this hostel name, block, and room number already exists in this camp")
+
+            # Update fields
+            updatable_fields = [
+                "hostel_name", "block", "room_number", "room_capacity", 
+                "is_special_room", "extra_beds", "room_gender", "is_damaged", 
+                "misc_info", "adjoining_to"
+            ]
+            
+            for field in updatable_fields:
+                if field in update_data:
+                    if field in ["room_capacity", "extra_beds"] and update_data[field] is not None:
+                        setattr(room, field, int(update_data[field]))
+                    elif field in ["hostel_name", "room_number"] and update_data[field] is not None:
+                        setattr(room, field, update_data[field].strip())
+                    elif field == "block" and update_data[field] is not None:
+                        setattr(room, field, update_data[field].strip() if update_data[field] else None)
+                    else:
+                        setattr(room, field, update_data[field])
+
+            db.session.commit()
+
+            current_app.logger.info(f"Room updated: {room.hostel_name} {room.block}-{room.room_number}")
+            return room
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in update_room: {str(e)}")
+            raise Exception("Failed to update room due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in update_room: {str(e)}")
+            raise Exception("Failed to update room")
+
+    def delete_room(self, room_id: str) -> bool:
+        """Delete a room"""
+        try:
+            room = self.get_room_by_id(room_id)
+            if not room:
+                return False
+
+            # Check if room has active allocations
+            active_allocations = [allocation for allocation in room.room_allocations if allocation.is_active]
+            if active_allocations:
+                raise ValueError("Cannot delete room with active allocations")
+
+            db.session.delete(room)
+            db.session.commit()
+
+            current_app.logger.info(f"Room deleted: {room.hostel_name} {room.block}-{room.room_number}")
+            return True
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in delete_room: {str(e)}")
+            raise Exception("Failed to delete room due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in delete_room: {str(e)}")
+            raise Exception("Failed to delete room")
+
+    def get_available_rooms(self, camp_id: str, gender: str = None) -> List[Room]:
+        """Get available rooms for a camp, optionally filtered by gender"""
+        try:
+            query = Room.query.filter_by(camp_id=camp_id, is_damaged=False)
+            
+            if gender:
+                query = query.filter_by(room_gender=gender)
+            
+            rooms = query.order_by(Room.hostel_name, Room.block, Room.room_number).all()
+            
+            # Filter out full rooms
+            available_rooms = [room for room in rooms if not room.is_full()]
+            
+            return available_rooms
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_available_rooms: {str(e)}")
+            return []
+
+
+class RoomAllocationService:
+    """Service class for room allocation-related business logic"""
+
+    def get_allocation_by_id(self, allocation_id: str) -> Optional[RoomAllocation]:
+        """Get room allocation by ID"""
+        try:
+            return RoomAllocation.query.filter_by(id=allocation_id).first()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_allocation_by_id: {str(e)}")
+            return None
+
+    def get_camp_allocations(self, camp_id: str, active_only: bool = True) -> List[RoomAllocation]:
+        """Get all room allocations for a camp"""
+        try:
+            query = RoomAllocation.query.filter_by(camp_id=camp_id)
+            if active_only:
+                query = query.filter_by(is_active=True)
+            
+            return query.order_by(RoomAllocation.allocation_date.desc()).all()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_camp_allocations: {str(e)}")
+            return []
+
+    def get_registration_allocation(self, registration_id: str, camp_id: str) -> Optional[RoomAllocation]:
+        """Get active room allocation for a registration"""
+        try:
+            return RoomAllocation.query.filter_by(
+                registration_id=registration_id,
+                camp_id=camp_id,
+                is_active=True
+            ).first()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_registration_allocation: {str(e)}")
+            return None
+
+    def allocate_room(self, allocation_data: Dict[str, Any], allocated_by: str) -> List[RoomAllocation]:
+        """Allocate multiple registrations to a room"""
+        try:
+            # Validate required fields
+            required_fields = ["room_id", "registration_ids", "camp_id"]
+            for field in required_fields:
+                if field not in allocation_data or not allocation_data[field]:
+                    raise ValueError(f"Missing required field: {field}")
+
+            # Get room and validate
+            room_service = RoomService()
+            room = room_service.get_room_by_id(allocation_data["room_id"])
+            if not room:
+                raise ValueError("Room not found")
+
+            if room.camp_id != allocation_data["camp_id"]:
+                raise ValueError("Room does not belong to this camp")
+
+            if room.is_damaged:
+                raise ValueError("Cannot allocate to a damaged room")
+
+            # Get registrations and validate
+            registration_ids = allocation_data["registration_ids"]
+            if not isinstance(registration_ids, list) or len(registration_ids) == 0:
+                raise ValueError("At least one registration ID must be provided")
+
+            registrations = []
+            for reg_id in registration_ids:
+                registration = Registration.query.filter_by(id=reg_id, camp_id=allocation_data["camp_id"]).first()
+                if not registration:
+                    raise ValueError(f"Registration {reg_id} not found or does not belong to this camp")
+                
+                # Check if registration already has an active allocation
+                existing_allocation = self.get_registration_allocation(reg_id, allocation_data["camp_id"])
+                if existing_allocation:
+                    raise ValueError(f"Registration {reg_id} ({registration.surname} {registration.last_name}) already has an active room allocation")
+                
+                registrations.append(registration)
+
+            # Check room capacity
+            current_occupancy = room.get_current_occupancy()
+            available_capacity = room.get_available_capacity()
+            
+            if len(registrations) > available_capacity:
+                raise ValueError(f"Room has only {available_capacity} available spaces, but {len(registrations)} registrations were provided")
+
+            # Check gender compatibility
+            for registration in registrations:
+                if room.room_gender != "other" and registration.sex != "other":
+                    if room.room_gender != registration.sex:
+                        raise ValueError(f"Gender mismatch: Room is for {room.room_gender} but registration {registration.surname} {registration.last_name} is {registration.sex}")
+
+            # Create allocations
+            allocations = []
+            for registration in registrations:
+                allocation = RoomAllocation(
+                    room_id=allocation_data["room_id"],
+                    registration_id=registration.id,
+                    camp_id=allocation_data["camp_id"],
+                    allocated_by=allocated_by,
+                    notes=allocation_data.get("notes")
+                )
+                
+                db.session.add(allocation)
+                allocations.append(allocation)
+                
+                # Mark registration as checked in when allocated a room
+                registration.has_checked_in = True
+
+            db.session.commit()
+
+            # Send notifications to allocated campers
+            for allocation in allocations:
+                self._send_allocation_notification(allocation)
+
+            current_app.logger.info(f"Room allocated: {len(allocations)} registrations allocated to room {room.hostel_name} {room.block}-{room.room_number} and marked as checked in")
+            return allocations
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in allocate_room: {str(e)}")
+            raise Exception("Failed to allocate room due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in allocate_room: {str(e)}")
+            raise Exception("Failed to allocate room")
+
+    def update_allocation(self, allocation_id: str, update_data: Dict[str, Any]) -> Optional[RoomAllocation]:
+        """Update room allocation information"""
+        try:
+            allocation = self.get_allocation_by_id(allocation_id)
+            if not allocation:
+                return None
+
+            # Update fields
+            updatable_fields = ["is_active", "notes"]
+            for field in updatable_fields:
+                if field in update_data:
+                    setattr(allocation, field, update_data[field])
+
+            db.session.commit()
+
+            current_app.logger.info(f"Room allocation updated: {allocation.id}")
+            return allocation
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in update_allocation: {str(e)}")
+            raise Exception("Failed to update allocation due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in update_allocation: {str(e)}")
+            raise Exception("Failed to update allocation")
+
+    def deallocate_room(self, allocation_id: str) -> bool:
+        """Deallocate a room (set allocation as inactive and mark registration as not checked in)"""
+        try:
+            allocation = self.get_allocation_by_id(allocation_id)
+            if not allocation:
+                return False
+
+            # Mark registration as not checked in when deallocating room
+            registration = allocation.registration
+            if registration:
+                registration.has_checked_in = False
+
+            allocation.is_active = False
+            db.session.commit()
+
+            current_app.logger.info(f"Room deallocated: allocation {allocation.id} and registration marked as not checked in")
+            return True
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in deallocate_room: {str(e)}")
+            raise Exception("Failed to deallocate room due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in deallocate_room: {str(e)}")
+            raise Exception("Failed to deallocate room")
+
+    def _send_allocation_notification(self, allocation: RoomAllocation) -> None:
+        """Send room allocation notification to camper via SMS and email"""
+        try:
+            from app.integrations.sms import sms
+            from app.integrations.mailer import mailer
+
+            registration = allocation.registration
+            room = allocation.room
+            camp_name = registration.camp.name
+            camper_name = f"{registration.surname} {registration.last_name}"
+
+            # Create room description
+            room_description = f"{room.hostel_name}"
+            if room.block:
+                room_description += f", Block {room.block}"
+            room_description += f", Room {room.room_number}"
+
+            # SMS message
+            sms_message = (
+                f"Hi {camper_name}! You've been allocated to {room_description} "
+                f"for {camp_name}. Your camper code is {registration.camper_code}. "
+                f"See you at camp!"
+            )
+
+            # Email message
+            email_subject = f"Room Allocation - {camp_name}"
+            email_message = f"""
+Dear {camper_name},
+
+Great news! Your room has been allocated for {camp_name}.
+
+Room Details:
+- Hostel: {room.hostel_name}
+- Block: {room.block or 'N/A'}
+- Room Number: {room.room_number}
+- Camper Code: {registration.camper_code}
+
+Additional Information:
+- Room Capacity: {room.room_capacity + room.extra_beds} people
+- Room Type: {'Special Room' if room.is_special_room else 'Standard Room'}
+{f"- Notes: {allocation.notes}" if allocation.notes else ""}
+
+We're excited to have you at camp!
+
+Best regards,
+The Camp Management Team
+            """
+
+            # Send SMS notification
+            try:
+                if registration.phone_number:
+                    sms.send_sms(registration.phone_number, sms_message)
+                    current_app.logger.info(
+                        f"SMS notification sent to {registration.phone_number} for room allocation"
+                    )
+            except Exception as e:
+                current_app.logger.error(f"Failed to send SMS notification: {str(e)}")
+
+            # Send email notification
+            try:
+                if registration.email:
+                    recipients = [registration.email]
+                    mailer.send_email(
+                        recipients=recipients,
+                        subject=email_subject,
+                        text=email_message,
+                        html=False,
+                    )
+                    current_app.logger.info(
+                        f"Email notification sent to {registration.email} for room allocation"
+                    )
+            except Exception as e:
+                current_app.logger.error(f"Failed to send email notification: {str(e)}")
+
+        except Exception as e:
+            current_app.logger.error(f"Error in _send_allocation_notification: {str(e)}")
+            # Don't raise the exception to avoid breaking the allocation process
+
+
+class FoodService:
+    """Service class for food-related business logic"""
+
+    def get_food_by_id(self, food_id: str) -> Optional['Food']:
+        """Get food by ID"""
+        try:
+            from .models import Food
+            return Food.query.filter_by(id=food_id).first()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_food_by_id: {str(e)}")
+            return None
+
+    def get_camp_foods(self, camp_id: str, category: str = None, date: datetime = None) -> List['Food']:
+        """Get all foods for a camp, optionally filtered by category and date"""
+        try:
+            from .models import Food
+            query = Food.query.filter_by(camp_id=camp_id)
+            
+            if category:
+                query = query.filter_by(category=category.lower())
+            
+            if date:
+                # Filter by date (ignoring time)
+                query = query.filter(db.func.date(Food.date) == date.date())
+            
+            return query.order_by(Food.date.desc(), Food.category).all()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_camp_foods: {str(e)}")
+            return []
+
+    def create_food(self, food_data: Dict[str, Any]) -> Optional['Food']:
+        """Create a new food entry"""
+        try:
+            from .models import Food
+            
+            # Validate required fields
+            required_fields = ["name", "quantity", "vendor", "date", "category", "camp_id"]
+            for field in required_fields:
+                if field not in food_data or food_data[field] is None:
+                    raise ValueError(f"Missing required field: {field}")
+
+            # Validate category
+            valid_categories = ["lunch", "supper", "snacks", "breakfast"]
+            if food_data["category"].lower() not in valid_categories:
+                raise ValueError(f"Invalid category. Must be one of: {', '.join(valid_categories)}")
+
+            # Validate quantity
+            if int(food_data["quantity"]) < 1:
+                raise ValueError("Quantity must be at least 1")
+
+            # Convert date string to datetime if needed
+            if isinstance(food_data["date"], str):
+                food_data["date"] = datetime.fromisoformat(food_data["date"])
+
+            new_food = Food(
+                name=food_data["name"].strip(),
+                quantity=int(food_data["quantity"]),
+                vendor=food_data["vendor"].strip(),
+                date=food_data["date"],
+                category=food_data["category"].lower(),
+                camp_id=food_data["camp_id"]
+            )
+
+            db.session.add(new_food)
+            db.session.commit()
+
+            current_app.logger.info(f"New food created: {new_food.name} ({new_food.quantity}) for camp {food_data['camp_id']}")
+            return new_food
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in create_food: {str(e)}")
+            raise Exception("Failed to create food due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in create_food: {str(e)}")
+            raise Exception("Failed to create food")
+
+    def update_food(self, food_id: str, update_data: Dict[str, Any]) -> Optional['Food']:
+        """Update food information"""
+        try:
+            food = self.get_food_by_id(food_id)
+            if not food:
+                return None
+
+            # Validate category if being updated
+            if "category" in update_data:
+                valid_categories = ["lunch", "supper", "snacks", "breakfast"]
+                if update_data["category"].lower() not in valid_categories:
+                    raise ValueError(f"Invalid category. Must be one of: {', '.join(valid_categories)}")
+
+            # Validate quantity if being updated
+            if "quantity" in update_data and update_data["quantity"] is not None:
+                if int(update_data["quantity"]) < 0:
+                    raise ValueError("Quantity must be non-negative")
+
+            # Update fields
+            updatable_fields = ["name", "quantity", "vendor", "date", "category"]
+            for field in updatable_fields:
+                if field in update_data:
+                    if field == "quantity" and update_data[field] is not None:
+                        setattr(food, field, int(update_data[field]))
+                    elif field == "category" and update_data[field] is not None:
+                        setattr(food, field, update_data[field].lower())
+                    elif field == "date" and update_data[field] is not None:
+                        date_val = update_data[field]
+                        if isinstance(date_val, str):
+                            date_val = datetime.fromisoformat(date_val)
+                        setattr(food, field, date_val)
+                    elif field in ["name", "vendor"] and update_data[field] is not None:
+                        setattr(food, field, update_data[field].strip())
+
+            db.session.commit()
+
+            current_app.logger.info(f"Food updated: {food.name}")
+            return food
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in update_food: {str(e)}")
+            raise Exception("Failed to update food due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in update_food: {str(e)}")
+            raise Exception("Failed to update food")
+
+    def delete_food(self, food_id: str) -> bool:
+        """Delete a food entry"""
+        try:
+            food = self.get_food_by_id(food_id)
+            if not food:
+                return False
+
+            # Check if food has allocations
+            from .models import FoodAllocation
+            allocations = FoodAllocation.query.filter_by(food_id=food_id).count()
+            if allocations > 0:
+                raise ValueError("Cannot delete food with existing allocations")
+
+            db.session.delete(food)
+            db.session.commit()
+
+            current_app.logger.info(f"Food deleted: {food.name}")
+            return True
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in delete_food: {str(e)}")
+            raise Exception("Failed to delete food due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in delete_food: {str(e)}")
+            raise Exception("Failed to delete food")
+
+    def get_food_with_allocation_stats(self, camp_id: str) -> List[Dict[str, Any]]:
+        """Get foods with allocation statistics"""
+        try:
+            from .models import Food, FoodAllocation
+            
+            foods = self.get_camp_foods(camp_id)
+            food_stats = []
+            
+            for food in foods:
+                allocated_count = FoodAllocation.query.filter_by(food_id=food.id).count()
+                available_quantity = food.quantity - allocated_count
+                
+                food_dict = food.to_dict()
+                food_dict['allocated_quantity'] = allocated_count
+                food_dict['available_quantity'] = available_quantity
+                food_stats.append(food_dict)
+            
+            return food_stats
+        except Exception as e:
+            current_app.logger.error(f"Error in get_food_with_allocation_stats: {str(e)}")
+            return []
+
+
+class FoodAllocationService:
+    """Service class for food allocation-related business logic with race condition protection"""
+
+    def get_allocation_by_id(self, allocation_id: str) -> Optional['FoodAllocation']:
+        """Get food allocation by ID"""
+        try:
+            from .models import FoodAllocation
+            return FoodAllocation.query.filter_by(id=allocation_id).first()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_allocation_by_id: {str(e)}")
+            return None
+
+    def get_camp_allocations(self, camp_id: str, food_category: str = None) -> List['FoodAllocation']:
+        """Get all food allocations for a camp"""
+        try:
+            from .models import FoodAllocation, Food
+            
+            query = FoodAllocation.query.filter_by(camp_id=camp_id)
+            
+            if food_category:
+                query = query.join(Food).filter(Food.category == food_category.lower())
+            
+            return query.order_by(FoodAllocation.allocation_date.desc()).all()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_camp_allocations: {str(e)}")
+            return []
+
+    def get_registration_allocations(self, registration_id: str, camp_id: str) -> List['FoodAllocation']:
+        """Get all food allocations for a registration"""
+        try:
+            from .models import FoodAllocation
+            return FoodAllocation.query.filter_by(
+                registration_id=registration_id,
+                camp_id=camp_id
+            ).order_by(FoodAllocation.allocation_date.desc()).all()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_registration_allocations: {str(e)}")
+            return []
+
+    def allocate_food(self, allocation_data: Dict[str, Any], allocated_by: str) -> Optional['FoodAllocation']:
+        """Allocate food to a registration with race condition protection and daily category validation"""
+        try:
+            from .models import Food, FoodAllocation
+            
+            # Validate required fields
+            required_fields = ["food_id", "registration_id", "camp_id"]
+            for field in required_fields:
+                if field not in allocation_data or not allocation_data[field]:
+                    raise ValueError(f"Missing required field: {field}")
+
+            # Use SELECT FOR UPDATE to prevent race conditions
+            food = Food.query.filter_by(
+                id=allocation_data["food_id"],
+                camp_id=allocation_data["camp_id"]
+            ).with_for_update().first()
+            
+            if not food:
+                raise ValueError("Food not found or does not belong to this camp")
+
+            # Get registration and validate
+            registration = Registration.query.filter_by(
+                id=allocation_data["registration_id"],
+                camp_id=allocation_data["camp_id"]
+            ).first()
+            
+            if not registration:
+                raise ValueError("Registration not found or does not belong to this camp")
+
+            # Check if registration already has allocation for this food
+            existing_allocation = FoodAllocation.query.filter_by(
+                food_id=allocation_data["food_id"],
+                registration_id=allocation_data["registration_id"]
+            ).first()
+            
+            if existing_allocation:
+                raise ValueError(f"Registration already has allocation for this food item")
+
+            # Check if registration has already taken this food category today
+            today = datetime.now(timezone.utc).date()
+            existing_category_allocation = db.session.query(FoodAllocation).join(Food).filter(
+                FoodAllocation.registration_id == allocation_data["registration_id"],
+                FoodAllocation.camp_id == allocation_data["camp_id"],
+                Food.category == food.category,
+                db.func.date(FoodAllocation.allocation_date) == today
+            ).first()
+            
+            if existing_category_allocation:
+                raise ValueError(f"Registration has already received {food.category} today. You can only have {food.category} once per day.")
+
+            # Check available quantity
+            allocated_count = FoodAllocation.query.filter_by(food_id=food.id).count()
+            available_quantity = food.quantity - allocated_count
+            
+            if available_quantity <= 0:
+                raise ValueError(f"No more {food.name} available for allocation")
+
+            # Create allocation
+            new_allocation = FoodAllocation(
+                food_id=allocation_data["food_id"],
+                registration_id=allocation_data["registration_id"],
+                camp_id=allocation_data["camp_id"],
+                allocated_by=allocated_by
+            )
+
+            db.session.add(new_allocation)
+            db.session.commit()
+
+            current_app.logger.info(f"Food allocated: {food.name} to {registration.surname} {registration.last_name}")
+            return new_allocation
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in allocate_food: {str(e)}")
+            raise Exception("Failed to allocate food due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in allocate_food: {str(e)}")
+            raise Exception("Failed to allocate food")
+
+    def bulk_allocate_food(self, allocation_data: Dict[str, Any], allocated_by: str) -> List['FoodAllocation']:
+        """Bulk allocate food to multiple registrations with race condition protection and daily category validation"""
+        try:
+            from .models import Food, FoodAllocation
+            
+            # Validate required fields
+            required_fields = ["food_id", "registration_ids", "camp_id"]
+            for field in required_fields:
+                if field not in allocation_data or not allocation_data[field]:
+                    raise ValueError(f"Missing required field: {field}")
+
+            # Validate registration_ids is a list
+            if not isinstance(allocation_data["registration_ids"], list) or len(allocation_data["registration_ids"]) == 0:
+                raise ValueError("At least one registration ID must be provided")
+
+            # Use SELECT FOR UPDATE to prevent race conditions
+            food = Food.query.filter_by(
+                id=allocation_data["food_id"],
+                camp_id=allocation_data["camp_id"]
+            ).with_for_update().first()
+            
+            if not food:
+                raise ValueError("Food not found or does not belong to this camp")
+
+            # Get today's date for category validation
+            today = datetime.now(timezone.utc).date()
+
+            # Get registrations and validate
+            registrations = []
+            for reg_id in allocation_data["registration_ids"]:
+                registration = Registration.query.filter_by(
+                    id=reg_id,
+                    camp_id=allocation_data["camp_id"]
+                ).first()
+                
+                if not registration:
+                    raise ValueError(f"Registration {reg_id} not found or does not belong to this camp")
+
+                # Check if registration already has allocation for this food
+                existing_allocation = FoodAllocation.query.filter_by(
+                    food_id=allocation_data["food_id"],
+                    registration_id=reg_id
+                ).first()
+                
+                if existing_allocation:
+                    raise ValueError(f"Registration {reg_id} ({registration.surname} {registration.last_name}) already has allocation for this food item")
+                
+                # Check if registration has already taken this food category today
+                existing_category_allocation = db.session.query(FoodAllocation).join(Food).filter(
+                    FoodAllocation.registration_id == reg_id,
+                    FoodAllocation.camp_id == allocation_data["camp_id"],
+                    Food.category == food.category,
+                    db.func.date(FoodAllocation.allocation_date) == today
+                ).first()
+                
+                if existing_category_allocation:
+                    raise ValueError(f"Registration {reg_id} ({registration.surname} {registration.last_name}) has already received {food.category} today. You can only have {food.category} once per day.")
+                
+                registrations.append(registration)
+
+            # Check available quantity
+            allocated_count = FoodAllocation.query.filter_by(food_id=food.id).count()
+            available_quantity = food.quantity - allocated_count
+            
+            if len(registrations) > available_quantity:
+                raise ValueError(f"Not enough {food.name} available. Available: {available_quantity}, Requested: {len(registrations)}")
+
+            # Create allocations
+            allocations = []
+            for registration in registrations:
+                allocation = FoodAllocation(
+                    food_id=allocation_data["food_id"],
+                    registration_id=registration.id,
+                    camp_id=allocation_data["camp_id"],
+                    allocated_by=allocated_by
+                )
+                
+                db.session.add(allocation)
+                allocations.append(allocation)
+
+            db.session.commit()
+
+            current_app.logger.info(f"Bulk food allocation: {food.name} allocated to {len(allocations)} registrations")
+            return allocations
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in bulk_allocate_food: {str(e)}")
+            raise Exception("Failed to bulk allocate food due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in bulk_allocate_food: {str(e)}")
+            raise Exception("Failed to bulk allocate food")
+
+    def allocate_food_by_category(self, allocation_data: Dict[str, Any], allocated_by: str) -> List['FoodAllocation']:
+        """Allocate food to all registrations in a specific category"""
+        try:
+            # Validate required fields
+            required_fields = ["food_id", "category_id", "camp_id"]
+            for field in required_fields:
+                if field not in allocation_data or not allocation_data[field]:
+                    raise ValueError(f"Missing required field: {field}")
+
+            # Get all registrations in the category
+            registrations = Registration.query.filter_by(
+                category_id=allocation_data["category_id"],
+                camp_id=allocation_data["camp_id"]
+            ).all()
+
+            if not registrations:
+                raise ValueError("No registrations found for this category")
+
+            # Use bulk allocation
+            bulk_data = {
+                "food_id": allocation_data["food_id"],
+                "registration_ids": [reg.id for reg in registrations],
+                "camp_id": allocation_data["camp_id"]
+            }
+
+            return self.bulk_allocate_food(bulk_data, allocated_by)
+
+        except ValueError:
+            raise
+        except Exception as e:
+            current_app.logger.error(f"Error in allocate_food_by_category: {str(e)}")
+            raise Exception("Failed to allocate food by category")
+
+    def deallocate_food(self, allocation_id: str) -> bool:
+        """Remove a food allocation"""
+        try:
+            allocation = self.get_allocation_by_id(allocation_id)
+            if not allocation:
+                return False
+
+            db.session.delete(allocation)
+            db.session.commit()
+
+            current_app.logger.info(f"Food allocation removed: {allocation.id}")
+            return True
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in deallocate_food: {str(e)}")
+            raise Exception("Failed to deallocate food due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in deallocate_food: {str(e)}")
+            raise Exception("Failed to deallocate food")
+
+    def get_daily_allocation_summary(self, camp_id: str, date: datetime) -> Dict[str, Any]:
+        """Get daily food allocation summary"""
+        try:
+            from .models import Food, FoodAllocation
+            
+            # Get foods for the specific date
+            foods = Food.query.filter_by(camp_id=camp_id).filter(
+                db.func.date(Food.date) == date.date()
+            ).all()
+
+            summary = {
+                "date": date.date(),
+                "categories": {},
+                "total_allocated": 0,
+                "total_available": 0
+            }
+
+            for food in foods:
+                category = food.category
+                if category not in summary["categories"]:
+                    summary["categories"][category] = {
+                        "foods": [],
+                        "total_allocated": 0,
+                        "total_available": 0
+                    }
+
+                allocated_count = FoodAllocation.query.filter_by(food_id=food.id).count()
+                available_quantity = food.quantity - allocated_count
+
+                food_info = {
+                    "id": food.id,
+                    "name": food.name,
+                    "vendor": food.vendor,
+                    "total_quantity": food.quantity,
+                    "allocated_quantity": allocated_count,
+                    "available_quantity": available_quantity
+                }
+
+                summary["categories"][category]["foods"].append(food_info)
+                summary["categories"][category]["total_allocated"] += allocated_count
+                summary["categories"][category]["total_available"] += available_quantity
+                summary["total_allocated"] += allocated_count
+                summary["total_available"] += available_quantity
+
+            return summary
+
+        except Exception as e:
+            current_app.logger.error(f"Error in get_daily_allocation_summary: {str(e)}")
+            return {"error": str(e)}
