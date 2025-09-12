@@ -40,12 +40,12 @@ class CampService:
         """Get all camps for a specific user"""
         try:
             camp_ids = CampWorker.query.filter_by(user_id=user_id).all()
-            print(camp_ids)
             camps = (
                 Camp.query.filter(Camp.id.in_([camp.camp_id for camp in camp_ids]))
                 .order_by(Camp.created_at.desc())
                 .all()
             )
+            print(camps)
             return camps
         except SQLAlchemyError as e:
             current_app.logger.error(f"Database error in get_user_camps: {str(e)}")

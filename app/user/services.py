@@ -123,6 +123,7 @@ class UserService:
                 email=email,
                 full_name=full_name,
                 role=user_data.get("role", "camp_manager"),
+                permissions=user_data.get("permissions", []),
             )
 
             # Set password (this will hash it)
@@ -137,7 +138,6 @@ class UserService:
                     user_id=new_user.id,
                     camp_id=user_data["camp_id"],
                     role=user_data.get("role", "volunteer"),
-                    permissions=user_data.get("permissions", ["food_allocations"]),
                 )
                 db.session.add(new_camp_worker)
                 db.session.commit()
@@ -181,9 +181,9 @@ class UserService:
                 return None
 
             # Check password
-            # if not user.check_password(password):
-            #     current_app.logger.warning(f"Authentication failed: Invalid password for email {email}")
-            #     return None
+            if not user.check_password(password):
+                current_app.logger.warning(f"Authentication failed: Invalid password for email {email}")
+                return None
 
             current_app.logger.info(f"User authenticated successfully: {email}")
             return user

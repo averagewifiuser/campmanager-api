@@ -109,12 +109,13 @@ def login(json_data):
             identity=str(user.id),
             expires_delta=timedelta(days=30)
         )
-        
+        user = user.to_dict()
+        user["page_permissions"] = user["permissions"]
         return jsonify({
             'data': {
                 'access_token': access_token,
                 'refresh_token': refresh_token,
-                'user': user.to_dict(),
+                'user': user,
                 'expires_in': 86400  # 24 hours in seconds
             }
         }), 200

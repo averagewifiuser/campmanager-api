@@ -25,7 +25,7 @@ class UserResponseSchema(BaseResponseSchema):
     email = fields.Email()
     full_name = fields.String()
     role = fields.String()
-    permissions = fields.List(fields.String())
+    page_permissions = fields.List(fields.String())
 
 
 # Specific Request Wrappers

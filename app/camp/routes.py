@@ -133,7 +133,7 @@ food_allocation_service = FoodAllocationService()
     description='Retrieve all camps managed by the authenticated user'
 )
 @token_required
-@role_required('camp_manager')
+# @role_required('camp_manager')
 def get_camps():
     """Get camps for current user"""
     try:
