@@ -1673,7 +1673,7 @@ def get_registrations(camp_id, query_data):
 # =============================================================================
 
 @camp_bp.get('/<camp_id>/payments')
-@camp_bp.output(PaymentListResponseWrapperSchema)
+# @camp_bp.output(PaymentListResponseWrapperSchema)
 @camp_bp.doc(
     summary='Get camp payments',
     description='Get all payments for a camp (Manager only)'
@@ -1684,7 +1684,7 @@ def get_payments(camp_id):
     """Get all payments for camp"""
     try:
         payments = payment_service.get_payments_by_camp(camp_id)
-        
+        print(payments)
         return {
             'data': payments
         }, 200
@@ -1701,7 +1701,7 @@ def get_payments(camp_id):
     
 @camp_bp.post('/<camp_id>/payments')
 @camp_bp.input(PaymentCreateRequestSchema)
-@camp_bp.output(PaymentResponseWrapperSchema, status_code=201)
+# @camp_bp.output(PaymentResponseWrapperSchema, status_code=201)
 @camp_bp.doc(
     summary='Create payment',
     description='Create a new payment for a camp'

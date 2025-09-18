@@ -1686,6 +1686,7 @@ class PaymentService:
         """Get all payments for a specific camp"""
         try:
             payments = Payment.query.filter_by(camp_id=camp_id).all()
+            print(payments)
             payments = [payment.to_dict() for payment in payments]
             for payment in payments:
                 payment['recorded_by'] = User.query.get(payment['recorded_by']).full_name
