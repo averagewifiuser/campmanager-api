@@ -1742,7 +1742,7 @@ class PaymentService:
             current_app.logger.error(f"Unexpected error in update_payment: {str(e)}")
             raise Exception("Failed to update payment")
 
-    def create_payment(self, payment_data: Dict[str, Any]) -> Optional[Payment]:
+    def create_payment(self, payment_data: Dict[str, Any], user_id=None) -> Optional[Payment]:
         """Create a new payment with smart allocation logic"""
         try:
             # Validate required fields
@@ -1835,7 +1835,7 @@ class PaymentService:
                             payment_channel=payment_data["payment_channel"],
                             recorded_by=payment_data["recorded_by"],
                             payment_reference=financials_referencee,
-                            payment_metadata=payment_data["payment_metadata"],
+                            payment_metadata=user_id or payment_data["payment_metadata"],
                         )
                         db.session.add(payment)
                         payment.registrations.append(registration)

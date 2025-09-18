@@ -1715,7 +1715,7 @@ def create_payment(camp_id, json_data):
         payment_data['camp_id'] = camp_id
         payment_data['recorded_by'] = str(get_current_user().id)
         
-        new_payment = payment_service.create_payment(payment_data)
+        new_payment = payment_service.create_payment(payment_data, user_id=str(get_current_user().id))
         
         return {
             'data': new_payment.to_dict() if new_payment else None
