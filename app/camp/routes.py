@@ -1686,7 +1686,7 @@ def get_payments(camp_id):
         payments = payment_service.get_payments_by_camp(camp_id)
         
         return {
-            'data': [pay.to_dict() for pay in payments]
+            'data': payments
         }, 200
         
     except Exception as e:
@@ -1715,10 +1715,10 @@ def create_payment(camp_id, json_data):
         payment_data['camp_id'] = camp_id
         payment_data['recorded_by'] = str(get_current_user().id)
         
-        new_payment = payment_service.create_payment(payment_data, user_id=str(get_current_user().id))
+        new_payments = payment_service.create_payment(payment_data, user_id=str(get_current_user().id))
         
         return {
-            'data': new_payment.to_dict() if new_payment else None
+            'data': new_payments
         }, 201
         
     except Exception as e:

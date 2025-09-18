@@ -1686,9 +1686,9 @@ class PaymentService:
         """Get all payments for a specific camp"""
         try:
             payments = Payment.query.filter_by(camp_id=camp_id).all()
+            payments = [payment.to_dict() for payment in payments]
             for payment in payments:
-                payment.recorded_by = User.query.get(payment.recorded_by).full_name
-
+                payment['recorded_by'] = User.query.get(payment.recorded_by).full_name
             return payments
         except SQLAlchemyError as e:
             db.session.rollback()
@@ -1907,7 +1907,10 @@ class PaymentService:
 
             # Return the first payment created, or create a dummy one if none were created
             if payments_created:
-                return payments_created[0]
+                payments_created = [payment.to_dict() for payment in payments_created]
+                for payment in payments_created:
+                    payment['recorded_by'] = User.query.get(payment['recorded_by']).full_name
+                return payments_created
             else:
                 # This shouldn't happen in normal cases, but just in case
                 return None
