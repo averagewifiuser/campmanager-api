@@ -88,6 +88,7 @@ class Church(BaseModel):
     name = db.Column(db.String(255), nullable=False)
     district = db.Column(db.String(255), nullable=True)
     area = db.Column(db.String(255), nullable=True)
+    region = db.Column(db.String(255), nullable=True)
     camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
     
     # Relationships
