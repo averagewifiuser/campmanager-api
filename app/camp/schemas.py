@@ -87,6 +87,7 @@ class ChurchResponseSchema(BaseResponseSchema):
     name = fields.String()
     district = fields.String()
     area = fields.String()
+    region = fields.String()
     camp_id = fields.String()
 
 
@@ -464,6 +465,7 @@ class ChurchResponseSchema(BaseResponseSchema):
     name = fields.String()
     district = fields.String()
     area = fields.String()
+    region = fields.String()
     camp_id = fields.String()
 
 
