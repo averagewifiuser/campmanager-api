@@ -1748,7 +1748,7 @@ def get_camp_financials(camp_id):
         financials = financial_service.get_financials_by_camp(camp_id)
         
         return {
-            'data': [financial.to_dict() for financial in financials]
+            'data': financials
         }, 200
         
     except Exception as e:

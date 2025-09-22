@@ -2210,16 +2210,12 @@ class FinancialService:  #
                 .order_by(Financial.date.desc())
                 .all()
             )
+            financials = [financial.to_dict() for financial in financials]
             for financial in financials:
-                user = User.query.get(financial.received_by)
-                financial.received_by = (
-                    user.full_name if user else financial.received_by
+                user = User.query.get(financial['received_by']) if financial['received_by'] else None 
+                financial['received_by'] = (
+                    user.full_name if user else financial['received_by']
                 )
-                if getattr(financial, "recorded_by", None):
-                    recorder = User.query.get(financial.recorded_by)
-                    financial.recorded_by = (
-                        recorder.full_name if recorder else financial.recorded_by
-                    )
             return financials
         except SQLAlchemyError as e:
             current_app.logger.error(
