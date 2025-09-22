@@ -2216,6 +2216,10 @@ class FinancialService:  #
                 financial['received_by'] = (
                     user.full_name if user else financial['received_by']
                 )
+                recorder = User.query.get(financial['recorded_by']) if financial['recorded_by'] else None
+                financial['recorded_by'] = (
+                    recorder.full_name if recorder else financial['recorded_by']
+                )
             return financials
         except SQLAlchemyError as e:
             current_app.logger.error(
