@@ -320,6 +320,11 @@ class ChurchService:
                     if "district" in church_data
                     else None
                 ),
+                region=(
+                    church_data["region"].strip()
+                    if "region" in church_data
+                    else None
+                )
             ).first()
 
             if existing_church:
@@ -338,6 +343,11 @@ class ChurchService:
                     if "district" in church_data
                     else existing_church.district
                 )
+                existing_church.region = (
+                    church_data["region"].strip()
+                    if "region" in church_data
+                    else existing_church.region
+                )
                 db.session.commit()
                 return existing_church
 
@@ -348,6 +358,11 @@ class ChurchService:
                 district=(
                     church_data["district"].strip()
                     if "district" in church_data
+                    else None
+                ),
+                region=(
+                    church_data["region"].strip()
+                    if "region" in church_data
                     else None
                 ),
             )
@@ -411,6 +426,10 @@ class ChurchService:
                     )
 
                 church.name = name
+                church.area = update_data.get("area", church.area)
+                church.district = update_data.get("district", church.district)
+                church.region = update_data.get("region", church.region)
+
 
             db.session.commit()
 

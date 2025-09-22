@@ -73,6 +73,7 @@ class ChurchCreateSchema(Schema):
     name = fields.String(required=True, validate=validate.Length(min=2, max=255))
     district = fields.String(validate=validate.Length(min=2, max=255))
     area = fields.String(validate=validate.Length(min=2, max=255))
+    region = fields.String(required=False, allow_none=True)
 
 
 class ChurchUpdateSchema(Schema):
@@ -451,6 +452,7 @@ class ChurchCreateSchema(Schema):
     name = fields.String(required=True, validate=validate.Length(min=2, max=255))
     district = fields.String(validate=validate.Length(min=2, max=255))
     area = fields.String(validate=validate.Length(min=2, max=255))
+    region = fields.String(required=False, allow_none=True)
 
 
 class ChurchUpdateSchema(Schema):
@@ -458,6 +460,7 @@ class ChurchUpdateSchema(Schema):
     name = fields.String(validate=validate.Length(min=2, max=255))
     district = fields.String(validate=validate.Length(min=2, max=255))
     area = fields.String(validate=validate.Length(min=2, max=255))
+    region = fields.String(required=False, allow_none=True)
 
 
 class ChurchResponseSchema(BaseResponseSchema):

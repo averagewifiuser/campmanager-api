@@ -106,6 +106,7 @@ class Church(BaseModel):
                 'district': self.district,
                 'area': self.area,
                 'camp_id': self.camp_id,
+                'region': self.region
             }
         return {
             'id': self.id,
@@ -113,6 +114,7 @@ class Church(BaseModel):
             'district': self.district,
             'area': self.area,
             'camp_id': self.camp_id,
+            'region': self.region,
             'registrations': [registration.to_dict(for_api=for_api, include_payments=True) for registration in self.registrations]
         }
 
