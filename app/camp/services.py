@@ -45,7 +45,6 @@ class CampService:
                 .order_by(Camp.created_at.desc())
                 .all()
             )
-            print(camps)
             return camps
         except SQLAlchemyError as e:
             current_app.logger.error(f"Database error in get_user_camps: {str(e)}")
@@ -1478,7 +1477,6 @@ class RegistrationService:
             current_app.logger.error(
                 f"Unexpected error in update_registration: {str(e)}"
             )
-            print(e)
             raise Exception("Failed to update registration")
 
     def cancel_registration(self, registration_id: str) -> bool:
@@ -1705,7 +1703,6 @@ class PaymentService:
         """Get all payments for a specific camp"""
         try:
             payments = Payment.query.filter_by(camp_id=camp_id).all()
-            print(payments)
             payments = [payment.to_dict() for payment in payments]
             for payment in payments:
                 payment['recorded_by'] = User.query.get(payment['recorded_by']).full_name
@@ -1816,6 +1813,7 @@ class PaymentService:
                 description="Payment for camp registration",
                 reference_number=financials_referencee,
                 payment_method=payment_data["payment_channel"],
+                recorded_by=payment_data["recorded_by"],
                 approved_by=payment_data["recorded_by"],
             )
             db.session.add(financial)
@@ -1915,6 +1913,7 @@ class PaymentService:
                         Financial.query.filter_by(camp_id=payment_data["camp_id"]).count() + random.randint(100, 999) + random.randint(100, 999) + random.randint(100, 999)
                     ),
                     payment_method=payment_data["payment_channel"],
+                    recorded_by=payment_data["recorded_by"],
                     approved_by=payment_data["recorded_by"],
                 )
                 db.session.add(overflow_financial)
@@ -2092,7 +2091,22 @@ class FinancialService:  #
     def get_financial_by_id(self, financial_id: str) -> Optional[Financial]:
         """Get financial record by ID"""
         try:
-            return Financial.query.filter_by(id=financial_id, is_deleted=False).first()
+            financial = Financial.query.filter_by(id=financial_id, is_deleted=False).first()
+            if not financial:
+                return None
+            # Resolve user names for received_by and recorded_by (if stored as IDs)
+            try:
+                user = User.query.get(financial.received_by)
+                financial.received_by = user.full_name if user else financial.received_by
+            except Exception:
+                pass
+            if getattr(financial, "recorded_by", None):
+                try:
+                    recorder = User.query.get(financial.recorded_by)
+                    financial.recorded_by = recorder.full_name if recorder else financial.recorded_by
+                except Exception:
+                    pass
+            return financial
         except SQLAlchemyError as e:
             current_app.logger.error(f"Database error in get_financial_by_id: {str(e)}")
             return None
@@ -2201,6 +2215,11 @@ class FinancialService:  #
                 financial.received_by = (
                     user.full_name if user else financial.received_by
                 )
+                if getattr(financial, "recorded_by", None):
+                    recorder = User.query.get(financial.recorded_by)
+                    financial.recorded_by = (
+                        recorder.full_name if recorder else financial.recorded_by
+                    )
             return financials
         except SQLAlchemyError as e:
             current_app.logger.error(

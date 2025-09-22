@@ -402,6 +402,7 @@ class Financial(BaseModel):
     description = db.Column(db.Text)  # For detailed notes about the transaction
     reference_number = db.Column(db.String(50))  # For tracking/receipts
     payment_method = db.Column(db.String(20))  # 'cash', 'check', 'momo', 'bank_transfer'
+    recorded_by = db.Column(String(36), db.ForeignKey('users.id'), nullable=True)
     
     # Optional fields for better tracking
     approved_by = db.Column(db.String(100))  # Who approved this transaction
@@ -430,6 +431,7 @@ class Financial(BaseModel):
             'description': self.description,
             'reference_number': self.reference_number,
             'payment_method': self.payment_method,
+            'recorded_by': self.recorded_by,
             'approved_by': self.approved_by,
             'is_deleted': self.is_deleted,
             'camp_id': self.camp_id,
@@ -655,6 +657,3 @@ class FoodAllocation(BaseModel):
             "allocated_by": self.allocated_by,
             "allocation_date": self.allocation_date,
         }
-
-
-    

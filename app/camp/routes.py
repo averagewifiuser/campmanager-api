@@ -862,7 +862,6 @@ def create_camp(json_data):
             }
         }, 400
     except Exception as e:
-        print(e)
         current_app.logger.error(f"Create camp error: {str(e)}")
         return {
             'data': {
@@ -1684,7 +1683,6 @@ def get_payments(camp_id):
     """Get all payments for camp"""
     try:
         payments = payment_service.get_payments_by_camp(camp_id)
-        print(payments)
         return {
             'data': payments
         }, 200
@@ -1777,11 +1775,17 @@ def create_financial(camp_id, json_data):
     """Create financial record"""
     try:
         financial_data = json_data['data']
+        # Ensure recorded_by is captured from authenticated user
+        financial_data['recorded_by'] = str(get_current_user().id)
         
         new_financial = financial_service.create_financial(financial_data, camp_id)
         
+        # Normalize recorded_by to the user's full name for response consistency (like payments)
+        result = new_financial.to_dict()
+        result['recorded_by'] = get_current_user().full_name
+        
         return {
-            'data': new_financial.to_dict()
+            'data': result
         }, 201
         
     except ValueError as e:

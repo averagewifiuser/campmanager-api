@@ -377,7 +377,6 @@ def request_otp(json_data):
 )
 def verify_otp(json_data):
     """Verify OTP and return registration data"""
-    print("I was here")
     try:
         camper_code = json_data['data']['camper_code'].strip().upper()
         otp_code = json_data['data']['otp_code'].strip()

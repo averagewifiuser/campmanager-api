@@ -708,6 +708,7 @@ class FinancialResponseSchema(BaseResponseSchema):
     reference_number = fields.String(required=True)
     payment_method = fields.String(required=True)
     approved_by = fields.String()
+    recorded_by = fields.String()
 
 
 class FinancialRequestSchema(Schema):
