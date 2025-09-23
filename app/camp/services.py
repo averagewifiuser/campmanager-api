@@ -1948,7 +1948,8 @@ class PaymentService:
     def generate_payment_reference(self, payments_number: int) -> str:
         """Generate a random payment reference"""
         payments_number += 1
-        return f"{payments_number:05d}"
+        random_caps = ''.join(random.choices(string.ascii_uppercase, k=5))
+        return f"{random_caps}-{payments_number:05d}"
 
     def _send_payment_notification(
         self, registration: Registration, amount_received: float
@@ -2361,7 +2362,8 @@ class FinancialService:  #
     def generate_financial_reference(self, financials_number: int) -> str:
         """Generate a financial reference number"""
         financials_number += 1
-        return f"FIN{financials_number:05d}"
+        random_caps = ''.join(random.choices(string.ascii_uppercase, k=5))
+        return f"{random_caps}-{financials_number:05d}"
 
 
 class InventoryService:
