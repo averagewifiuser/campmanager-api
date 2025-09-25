@@ -6,6 +6,7 @@ from decimal import Decimal
 import random
 import string
 from app.user.models import User
+from app.cache import cached, invalidate_registration_form_cache
 
 from .models import (
     Camp,
@@ -369,6 +370,9 @@ class ChurchService:
             db.session.add(new_church)
             db.session.commit()
 
+            # Invalidate registration form cache for this camp
+            invalidate_registration_form_cache(church_data['camp_id'])
+
             current_app.logger.info(
                 f"New church created: {new_church.name} for camp {church_data['camp_id']}"
             )
@@ -545,6 +549,9 @@ class CategoryService:
 
             db.session.add(new_category)
             db.session.commit()
+
+            # Invalidate registration form cache for this camp
+            invalidate_registration_form_cache(category_data['camp_id'])
 
             current_app.logger.info(
                 f"New category created: {new_category.name} for camp {category_data['camp_id']}"
@@ -749,6 +756,9 @@ class CustomFieldService:
 
             db.session.add(new_field)
             db.session.commit()
+
+            # Invalidate registration form cache for this camp
+            invalidate_registration_form_cache(field_data['camp_id'])
 
             current_app.logger.info(
                 f"New custom field created: {new_field.field_name} for camp {field_data['camp_id']}"
@@ -1123,14 +1133,18 @@ class RegistrationService:
             )
             return []
 
+    @cached(timeout=600, key_prefix='registration_form')  # Cache for 10 minutes
     def get_registration_form(
         self, camp_id: str, link_token: str = None
     ) -> Optional[Dict[str, Any]]:
-        """Get registration form structure"""
+        """Get registration form structure with caching"""
         try:
+            current_app.logger.info(f"Fetching registration form for camp_id: {camp_id}, link_token: {link_token}")
+            
             # Get camp
             camp = Camp.query.filter_by(id=camp_id, is_active=True).first()
             if not camp:
+                current_app.logger.warning(f"Camp not found or inactive: {camp_id}")
                 return None
 
             # TODO: fix this
@@ -1157,6 +1171,7 @@ class RegistrationService:
                     link_token=link_token
                 ).first()
                 if not registration_link or not registration_link.is_valid():
+                    current_app.logger.warning(f"Invalid or expired registration link: {link_token}")
                     return None
 
                 # Get only allowed categories
@@ -1178,7 +1193,7 @@ class RegistrationService:
                 )
                 link_type = "general"
 
-            return {
+            form_data = {
                 "camp": camp.to_dict(),
                 "churches": [church.to_dict() for church in churches],
                 "categories": [category.to_dict() for category in categories],
@@ -1188,6 +1203,9 @@ class RegistrationService:
                     registration_link.to_dict() if registration_link else None
                 ),
             }
+            
+            current_app.logger.info(f"Successfully fetched registration form for camp_id: {camp_id}")
+            return form_data
 
         except Exception as e:
             current_app.logger.error(f"Error in get_registration_form: {str(e)}")
