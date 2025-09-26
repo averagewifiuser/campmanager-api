@@ -1133,7 +1133,7 @@ class RegistrationService:
             )
             return []
 
-    @cached(timeout=600, key_prefix='registration_form')  # Cache for 10 minutes
+    # @cached(timeout=600, key_prefix='registration_form')  # Cache for 10 minutes
     def get_registration_form(
         self, camp_id: str, link_token: str = None
     ) -> Optional[Dict[str, Any]]:
