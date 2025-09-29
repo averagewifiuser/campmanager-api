@@ -86,14 +86,16 @@ def send_sms_threaded(sms_service, phone_number: str, message: str):
             print(f"Failed to send SMS to {phone_number}: {str(e)}")
 
 
-def send_email_threaded(mailer_service, recipients: list, subject: str, text: str, sender: str = None, html: bool = False):
+def send_email_threaded(mailer_service, recipients: list, subject: str, text: str, sender: str = None, html: bool = False, attachments: list = None):
     """Send email in a separate thread"""
     try:
         mailer_service.send_email(
             recipients=recipients,
             subject=subject,
             text=text,
-            html=html
+            sender=sender,
+            html=html,
+            attachments=attachments
         )
         # Try to use current_app logger, fallback to print if not available
         try:

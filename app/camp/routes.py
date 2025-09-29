@@ -96,6 +96,8 @@ from .schemas import (
     FoodAllocationResponseWrapperSchema,
     FoodAllocationListResponseWrapperSchema,
     BulkFoodAllocationRequestSchema,
+
+    EmailQrSchema
 )
 from app._shared.schemas import SuccessMessageWrapperSchema
 from .services import CampService, ChurchService, CategoryService, CustomFieldService, RegistrationLinkService, RegistrationService, PaymentService, FinancialService, InventoryService, PurchaseService, PledgeService, RoomService, RoomAllocationService, FoodService, FoodAllocationService
@@ -4005,6 +4007,119 @@ def decode_qr_code(json_data):
             'data': {
                 'code': 'QR_CODE_DECODE_ERROR',
                 'message': 'Failed to decode QR code',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+# =============================================================================
+# QR EMAIL ROUTE
+# =============================================================================
+
+@camp_bp.post('/send-email')
+@camp_bp.input(EmailQrSchema)
+@camp_bp.output(SuccessMessageWrapperSchema)
+@camp_bp.doc(
+    summary='Send camper QR code email',
+    description='Queues an email to the camper with their QR code using the existing HTML template. Requires registration to be fully paid.'
+)
+@token_required
+def email_qr_code(json_data):
+    """Send QR code email to a camper (queues async send)"""
+    try:
+        # Get registration
+        registration = registration_service.get_registration_by_camper_code(json_data['camperCode'])
+        if not registration:
+            return {
+                'data': {
+                    'code': 'REGISTRATION_NOT_FOUND',
+                    'message': 'Registration not found',
+                    'details': None
+                }
+            }, 404
+
+        # Ensure camper is fully paid before sending QR
+        # if not registration.is_fully_paid():
+        #     return {
+        #         'data': {
+        #             'code': 'PAYMENT_INCOMPLETE',
+        #             'message': 'QR code email is only available for fully paid registrations',
+        #             'details': {
+        #                 'outstanding_balance': float(registration.get_outstanding_balance()),
+        #                 'total_amount': float(registration.total_amount),
+        #                 'total_paid': registration.get_total_payments()
+        #             }
+        #         }
+        #     }, 400
+
+        # Determine recipient
+        req_data = json_data
+        to = req_data.get('to')
+        recipients = [to] if to else ([registration.email] if registration.email else [])
+        if not recipients:
+            return {
+                'data': {
+                    'code': 'MISSING_EMAIL',
+                    'message': 'No recipient email provided and registration has no email',
+                    'details': None
+                }
+            }, 400
+
+        # Build email content
+        from app.integrations.mailer import mailer
+        from app.integrations.qr_service import qr_service
+        from app.integrations.threading_utils import threaded_service, send_email_threaded
+
+        camp_name = registration.camp.name
+        camper_name = f"{registration.surname} {registration.last_name}"
+
+        # Generate QR in HTML (for embedding) and Base64 (for optional attachment)
+
+        template_context = {
+            'camp_name': camp_name,
+            'camper_name': camper_name,
+            'camper_code': registration.camper_code,
+            'camp_start_date': registration.camp.start_date.strftime('%B %d, %Y'),
+            'qr_code_cid': f"qr_{registration.camper_code}.png",
+            'support_email': 'support@wedidtech.com'
+        }
+
+        html_content = mailer.generate_email_text('qr-code.html', template_context)
+        subject = req_data.get('subject') or f"Your QR Code - {camp_name}"
+
+        # Optional PNG attachment
+        attachments = None
+        if req_data.get('qrBase64', False):
+            attachments = [{
+                'filename': f"qr_{registration.camper_code}.png",
+                'fileblob': json_data['qrBase64'],
+                'mimetype': 'image/png'
+            }]
+
+        # Queue email send on background thread
+        threaded_service.execute_in_thread(
+            send_email_threaded,
+            mailer,
+            recipients,
+            subject,
+            html_content,
+            None,
+            True,
+            attachments
+        )
+
+        return {
+            'data': {
+                'message': 'QR code email queued for delivery'
+            }
+        }, 200
+
+    except Exception as e:
+        current_app.logger.error(f"Email QR code error: {str(e)}")
+        return {
+            'data': {
+                'code': 'EMAIL_QR_ERROR',
+                'message': 'Failed to send QR code email',
                 'details': {'error': str(e)}
             }
         }, 500

@@ -19,6 +19,7 @@ class Mailer(object):
         text,
         sender="CampManager Support <support@wedidtech.com>",
         html=False,
+        attachments=None,
     ):
         """
         Sends an email using the SMTP2GO API.
@@ -35,12 +36,25 @@ class Mailer(object):
         payload = {
             "api_key": self.api_key,
             "to": recipients,
-            "sender": sender,
+            "sender": sender if sender else "CampManager Support <support@wedidtech.com>",
             "subject": subject,
             "text_body": text if not html else None,
             "html_body": text if html else None,
         }
-
+        if attachments:
+            # SMTP2GO expects base64 content under 'fileblob'
+            payload["attachments"] = [
+                {
+                    "filename": att.get("filename"),
+                    "fileblob": att.get("fileblob"),
+                    "mimetype": att.get("mimetype", "application/octet-stream"),
+                    "content_id": att.get("filename"),
+                }
+                for att in attachments
+                if att and att.get("filename") and att.get("fileblob")
+            ]
+        
+        print(payload)  # Debug print to check payload structure
         response = requests.post(self.api_url, headers=headers, json=payload)
         print(response.json())
         response.raise_for_status()  # Raise an exception for HTTP errors

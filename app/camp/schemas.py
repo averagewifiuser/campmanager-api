@@ -895,6 +895,13 @@ class BulkFoodAllocationSchema(Schema):
     category_id = fields.String(required=False)  # Optional: allocate to all in category
 
 
+class EmailQrSchema(Schema):
+    camperCode = fields.String(required=True)
+    name = fields.String(required=True)
+    qrBase64 = fields.String(required=True)
+    subject = fields.String(required=True)
+    to = fields.String(required=True)
+
 # Error Schema
 class ErrorSchema(Schema):
     """Schema for error responses"""
