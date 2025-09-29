@@ -53,8 +53,7 @@ class Mailer(object):
                 for att in attachments
                 if att and att.get("filename") and att.get("fileblob")
             ]
-        
-        print(payload)  # Debug print to check payload structure
+            
         response = requests.post(self.api_url, headers=headers, json=payload)
         print(response.json())
         response.raise_for_status()  # Raise an exception for HTTP errors
