@@ -2326,7 +2326,8 @@ def update_purchase(purchase_id, json_data):
     """Update purchase record"""
     try:
         update_data = json_data['data']
-        camp_id = update_data.get('camp_id')
+        camp_id = update_data.pop('camp_id')
+
         
         if not camp_id:
             return {

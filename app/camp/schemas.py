@@ -769,6 +769,7 @@ class PurchaseRequestSchema(Schema):
     is_item_supplied = fields.Boolean(required=False)
     # Keep inventory_ids for backward compatibility
     inventory_ids = fields.String(required=False)
+    camp_id = fields.String(required=False)
 
 
 class PurchaseRequestWrapperSchema(Schema):
