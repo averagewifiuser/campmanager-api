@@ -2242,7 +2242,7 @@ def create_purchase(camp_id, json_data):
     try:
         purchase_data = json_data['data']
         purchase_data['camp_id'] = camp_id
-        purchase_data['sold_by'] = str(get_current_user().full_name)
+        purchase_data['sold_by'] = str(get_current_user().id)
         
         new_purchase = purchase_service.create_purchase(purchase_data)
         

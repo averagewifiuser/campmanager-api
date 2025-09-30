@@ -765,6 +765,8 @@ class PurchaseRequestSchema(Schema):
     """Schema for purchase request"""
     amount = fields.Decimal(required=True, validate=validate.Range(min=0))
     items = fields.List(fields.Nested(PurchaseItemSchema), required=True, validate=validate.Length(min=1))
+    camper_name = fields.String(required=False, allow_none=True)
+    is_item_supplied = fields.Boolean(required=False)
     # Keep inventory_ids for backward compatibility
     inventory_ids = fields.String(required=False)
 
@@ -780,8 +782,10 @@ class PurchaseResponseSchema(BaseResponseSchema):
     purchase_date = fields.DateTime(required=True)
     camp_id = fields.String(required=True)
     items = fields.List(fields.Nested(PurchaseItemSchema), required=False)
-    inventory_ids = fields.String(required=True)  # Keep for backward compatibility
+    inventory_ids = fields.String(required=False, allow_none=True)  # Keep for backward compatibility
     sold_by = fields.String(required=True)
+    camper_name = fields.String(required=False, allow_none=True)
+    is_item_supplied = fields.Boolean(required=False)
 
 
 class PurchaseResponseWrapperSchema(Schema):

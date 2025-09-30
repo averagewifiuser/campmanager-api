@@ -2569,7 +2569,11 @@ class PurchaseService:
         try:
             from .models import Purchase
 
-            return Purchase.query.filter_by(id=purchase_id, camp_id=camp_id).first()
+            purchase = Purchase.query.filter_by(id=purchase_id, camp_id=camp_id).first()
+            if purchase:
+                user = User.query.get(purchase.sold_by)
+                purchase.sold_by = user.full_name if user else purchase.sold_by
+            return purchase
         except SQLAlchemyError as e:
             current_app.logger.error(f"Database error in get_purchase_by_id: {str(e)}")
             return None
@@ -2637,11 +2641,12 @@ class PurchaseService:
                             f"Inventory item {item['inventory_id']} not found"
                         )
 
-                    # Check if enough quantity is available
-                    if inventory.quantity < item["quantity"]:
-                        raise ValueError(
-                            f"Not enough quantity available for {inventory.name}. Available: {inventory.quantity}, Requested: {item['quantity']}"
-                        )
+                    # Check if enough quantity is available (only when supplying items now)
+                    if purchase_data.get("is_item_supplied"):
+                        if inventory.quantity < item["quantity"]:
+                            raise ValueError(
+                                f"Not enough quantity available for {inventory.name}. Available: {inventory.quantity}, Requested: {item['quantity']}"
+                            )
 
                     inventory_ids.append(item["inventory_id"])
                     total_quantity += item["quantity"]
@@ -2649,13 +2654,14 @@ class PurchaseService:
                 # Create backward-compatible inventory_ids string
                 purchase_data["inventory_ids"] = ",".join(inventory_ids)
 
-                # Update inventory quantities
-                inventory_svc = InventoryService()
-                for item in purchase_data["items"]:
-                    inventory = inventory_svc.get_inventory_by_id(
-                        item["inventory_id"], purchase_data["camp_id"]
-                    )
-                    inventory.quantity -= item["quantity"]
+                # Update inventory quantities only if items are being supplied now
+                if purchase_data.get("is_item_supplied"):
+                    inventory_svc = InventoryService()
+                    for item in purchase_data["items"]:
+                        inventory = inventory_svc.get_inventory_by_id(
+                            item["inventory_id"], purchase_data["camp_id"]
+                        )
+                        inventory.quantity -= item["quantity"]
 
             else:
                 # Old format with inventory_ids string - maintain backward compatibility
@@ -2704,8 +2710,18 @@ class PurchaseService:
     def update_purchase(
         self, purchase_id: str, update_data: Dict[str, Any], camp_id: str
     ) -> Optional["Purchase"]:
-        """Update purchase record information"""
+        """Update purchase record information (supports items JSON, camper_name, and is_item_supplied).
+        
+        Inventory adjustment rules:
+        - When toggling is_item_supplied from False->True: deduct all item quantities from inventory.
+        - When toggling True->False: restock all item quantities back to inventory.
+        - When is_item_supplied stays True and items change: apply the delta per inventory_id.
+        - When is_item_supplied is False and items change: do not touch inventory.
+        """
         try:
+            from .models import Purchase  # type: ignore
+            inventory_svc = InventoryService()
+
             purchase = self.get_purchase_by_id(purchase_id, camp_id)
             if not purchase:
                 return None
@@ -2715,22 +2731,96 @@ class PurchaseService:
                 if float(update_data["amount"]) <= 0:
                     raise ValueError("Amount must be greater than 0")
 
-            # Validate inventory_ids format if being updated
-            if (
-                "inventory_ids" in update_data
-                and update_data["inventory_ids"] is not None
-            ):
+            # Legacy inventory_ids (string) support: if provided and no items provided, convert to items
+            new_items = None
+            if "items" in update_data and update_data["items"] is not None:
+                # Validate items structure
+                if not isinstance(update_data["items"], list) or len(update_data["items"]) == 0:
+                    raise ValueError("Items must be a non-empty list")
+                tmp_items = []
+                for item in update_data["items"]:
+                    if not isinstance(item, dict):
+                        raise ValueError("Each item must be a dictionary")
+                    if "inventory_id" not in item or "quantity" not in item:
+                        raise ValueError("Each item must have inventory_id and quantity")
+                    if not isinstance(item["quantity"], int) or item["quantity"] < 1:
+                        raise ValueError("Quantity must be a positive integer")
+
+                    # Validate inventory exists
+                    inv = inventory_svc.get_inventory_by_id(item["inventory_id"], camp_id)
+                    if not inv:
+                        raise ValueError(f"Inventory item {item['inventory_id']} not found")
+                    tmp_items.append({"inventory_id": item["inventory_id"], "quantity": int(item["quantity"])})
+                new_items = tmp_items
+            elif "inventory_ids" in update_data and update_data["inventory_ids"] is not None:
+                # Validate inventory_ids format (should be comma-separated string)
                 if not isinstance(update_data["inventory_ids"], str):
                     raise ValueError("inventory_ids must be a comma-separated string")
+                ids = [x.strip() for x in update_data["inventory_ids"].split(",") if x.strip()]
+                tmp_items = []
+                for inv_id in ids:
+                    inv = inventory_svc.get_inventory_by_id(inv_id, camp_id)
+                    if not inv:
+                        raise ValueError(f"Inventory item {inv_id} not found")
+                    tmp_items.append({"inventory_id": inv_id, "quantity": 1})
+                new_items = tmp_items
 
-            # Update fields
-            updatable_fields = ["amount", "inventory_ids", "sold_by"]
-            for field in updatable_fields:
-                if field in update_data:
-                    if field == "amount" and update_data[field] is not None:
-                        setattr(purchase, field, Decimal(str(update_data[field])))
+            # Determine supply state
+            old_items_list = purchase.items or []
+            old_supplied = bool(purchase.is_item_supplied)
+            target_supplied = old_supplied if "is_item_supplied" not in update_data or update_data["is_item_supplied"] is None else bool(update_data["is_item_supplied"])
+
+            # If items not provided in update, keep current items
+            if new_items is None:
+                new_items = old_items_list
+
+            # Helper map builders
+            def to_map(items_list: List[Dict[str, Any]]) -> Dict[str, int]:
+                m: Dict[str, int] = {}
+                for it in items_list or []:
+                    iid = str(it["inventory_id"])
+                    qty = int(it.get("quantity", 0))
+                    m[iid] = m.get(iid, 0) + qty
+                return m
+
+            old_map = to_map(old_items_list) if old_supplied else {}  # if not supplied, treated as zero baseline
+            new_map = to_map(new_items) if target_supplied else {}     # if not going to be supplied, zero baseline
+
+            # Compute deltas (new - old) for supplied state transitions
+            all_ids = set(old_map.keys()) | set(new_map.keys())
+            deltas: Dict[str, int] = {iid: new_map.get(iid, 0) - old_map.get(iid, 0) for iid in all_ids}
+
+            # Validate inventory availability for positive deltas (deductions)
+            for iid, delta in deltas.items():
+                if delta > 0:
+                    inv = inventory_svc.get_inventory_by_id(iid, camp_id)
+                    if not inv:
+                        raise ValueError(f"Inventory item {iid} not found")
+                    if inv.quantity < delta:
+                        raise ValueError(f"Not enough quantity available for {inv.name}. Available: {inv.quantity}, Requested additional: {delta}")
+
+            # Apply inventory adjustments
+            for iid, delta in deltas.items():
+                if delta != 0:
+                    inv = inventory_svc.get_inventory_by_id(iid, camp_id)
+                    if not inv:
+                        raise ValueError(f"Inventory item {iid} not found")
+                    if delta > 0:
+                        inv.quantity -= delta
                     else:
-                        setattr(purchase, field, update_data[field])
+                        inv.quantity += (-delta)
+
+            # Update purchase fields
+            if "amount" in update_data and update_data["amount"] is not None:
+                purchase.amount = Decimal(str(update_data["amount"]))
+            if "sold_by" in update_data and update_data["sold_by"] is not None:
+                purchase.sold_by = update_data["sold_by"]
+            if "camper_name" in update_data:
+                purchase.camper_name = update_data["camper_name"]
+            # Persist normalized items and inventory_ids
+            purchase.items = new_items
+            purchase.inventory_ids = ",".join([iid for iid in to_map(new_items).keys()]) if new_items else None
+            purchase.is_item_supplied = target_supplied
 
             db.session.commit()
 

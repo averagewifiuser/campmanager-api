@@ -473,6 +473,8 @@ class Purchase(BaseModel):
     camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
     items = db.Column(JSON, nullable=False)  # Changed from inventory_ids to items with quantities
     sold_by = db.Column(String(36), db.ForeignKey('users.id'), nullable=False)
+    camper_name = db.Column(db.String(255), nullable=True)  # Optional field for camper name
+    is_item_supplied = db.Column(db.Boolean, default=False, nullable=True)  # Whether items have been supplied after purchase
     
     # Keep inventory_ids for backward compatibility (will be deprecated)
     inventory_ids = db.Column(db.String(100), nullable=True)
@@ -485,6 +487,8 @@ class Purchase(BaseModel):
             'camp_id': self.camp_id,
             'items': self.items,
             'sold_by': self.sold_by,
+            'camper_name': self.camper_name,
+            'is_item_supplied': self.is_item_supplied,
             # Include legacy field for backward compatibility
             'inventory_ids': self.inventory_ids,
         }
