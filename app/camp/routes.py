@@ -3598,7 +3598,7 @@ def allocate_food(camp_id, json_data):
         return {
             'data': {
                 'code': 'ALLOCATE_FOOD_ERROR',
-                'message': 'Failed to allocate food',
+                'message': str(e),
                 'details': {'error': str(e)}
             }
         }, 500
