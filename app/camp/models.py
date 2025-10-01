@@ -542,7 +542,7 @@ class Room(BaseModel):
 
     def get_current_occupancy(self):
         """Get current number of campers allocated to this room"""
-        return len([allocation for allocation in self.room_allocations if allocation.is_active])
+        return len([allocation for allocation in self.room_allocations])
 
     def get_available_capacity(self):
         """Get available capacity in this room"""
