@@ -68,6 +68,9 @@ from .schemas import (
     PledgeResponseWrapperSchema,
     PledgeListResponseWrapperSchema,
     PledgeStatusChangeWrapperSchema,
+    PledgeFulfillmentRequestWrapperSchema,
+    PledgeFulfillmentResponseWrapperSchema,
+    PledgeFulfillmentListResponseWrapperSchema,
     
     # Check-in Schemas
     CheckedInRequestWrapperSchema,
@@ -2441,6 +2444,7 @@ def get_camp_pledges(camp_id):
             if camper:
                 pledge['camper_name'] = camper.last_name + ', ' + camper.surname
                 pledge['camper_code'] = camper.camper_code
+                pledge['camper_phone_number'] = camper.phone_number
             
         
         return {
@@ -2792,6 +2796,152 @@ def change_pledge_status(pledge_id, json_data):
             'data': {
                 'code': 'CHANGE_PLEDGE_STATUS_ERROR',
                 'message': 'Failed to change pledge status',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+# =============================================================================
+# PLEDGE FULFILLMENT ROUTES
+# =============================================================================
+
+@camp_bp.post('/pledges/<pledge_id>/fulfillments')
+@camp_bp.input(PledgeFulfillmentRequestWrapperSchema)
+@camp_bp.output(PledgeFulfillmentResponseWrapperSchema, status_code=201)
+@camp_bp.doc(
+    summary='Add pledge fulfillment',
+    description='Add a partial fulfillment to a pledge'
+)
+@token_required
+def add_pledge_fulfillment(pledge_id, json_data):
+    """Add pledge fulfillment"""
+    try:
+        fulfillment_data = json_data['data']
+        camp_id = request.args.get('camp_id')
+        
+        if not camp_id:
+            return {
+                'data': {
+                    'code': 'MISSING_CAMP_ID',
+                    'message': 'Camp ID is required',
+                    'details': None
+                }
+            }, 400
+        
+        recorded_by = str(get_current_user().id)
+        fulfillment = pledge_service.add_fulfillment(pledge_id, fulfillment_data, recorded_by, camp_id)
+        
+        if not fulfillment:
+            return {
+                'data': {
+                    'code': 'PLEDGE_NOT_FOUND',
+                    'message': 'Pledge record not found',
+                    'details': None
+                }
+            }, 404
+        
+        return {
+            'data': fulfillment.to_dict()
+        }, 201
+        
+    except ValueError as e:
+        return {
+            'data': {
+                'code': 'VALIDATION_ERROR',
+                'message': str(e),
+                'details': None
+            }
+        }, 400
+    except Exception as e:
+        current_app.logger.error(f"Add pledge fulfillment error: {str(e)}")
+        return {
+            'data': {
+                'code': 'ADD_FULFILLMENT_ERROR',
+                'message': 'Failed to add pledge fulfillment',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.get('/pledges/<pledge_id>/fulfillments')
+@camp_bp.output(PledgeFulfillmentListResponseWrapperSchema)
+@camp_bp.doc(
+    summary='Get pledge fulfillments',
+    description='Get all fulfillments for a specific pledge'
+)
+@token_required
+def get_pledge_fulfillments(pledge_id):
+    """Get pledge fulfillments"""
+    try:
+        camp_id = request.args.get('camp_id')
+        if not camp_id:
+            return {
+                'data': {
+                    'code': 'MISSING_CAMP_ID',
+                    'message': 'Camp ID is required',
+                    'details': None
+                }
+            }, 400
+        
+        fulfillments = pledge_service.get_pledge_fulfillments(pledge_id, camp_id)
+        
+        return {
+            'data': [fulfillment.to_dict() for fulfillment in fulfillments]
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Get pledge fulfillments error: {str(e)}")
+        return {
+            'data': {
+                'code': 'GET_FULFILLMENTS_ERROR',
+                'message': 'Failed to retrieve pledge fulfillments',
+                'details': {'error': str(e)}
+            }
+        }, 500
+
+
+@camp_bp.delete('/pledge-fulfillments/<fulfillment_id>')
+@camp_bp.output(SuccessMessageWrapperSchema)
+@camp_bp.doc(
+    summary='Delete pledge fulfillment',
+    description='Delete a specific pledge fulfillment and adjust pledge accordingly'
+)
+@token_required
+def delete_pledge_fulfillment(fulfillment_id):
+    """Delete pledge fulfillment"""
+    try:
+        camp_id = request.args.get('camp_id')
+        if not camp_id:
+            return {
+                'data': {
+                    'code': 'MISSING_CAMP_ID',
+                    'message': 'Camp ID is required',
+                    'details': None
+                }
+            }, 400
+        
+        success = pledge_service.delete_fulfillment(fulfillment_id, camp_id)
+        if not success:
+            return {
+                'data': {
+                    'code': 'DELETE_FAILED',
+                    'message': 'Failed to delete pledge fulfillment',
+                    'details': None
+                }
+            }, 400
+        
+        return {
+            'data': {
+                'message': 'Pledge fulfillment deleted successfully'
+            }
+        }, 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Delete pledge fulfillment error: {str(e)}")
+        return {
+            'data': {
+                'code': 'DELETE_FULFILLMENT_ERROR',
+                'message': 'Failed to delete pledge fulfillment',
                 'details': {'error': str(e)}
             }
         }, 500

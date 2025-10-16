@@ -503,15 +503,70 @@ class Pledge(BaseModel):
     camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
     camper_id = db.Column(String(36), db.ForeignKey('registrations.id'), nullable=False)
     status = db.Column(db.String(20), nullable=False)
+    fulfilled_amount = db.Column(db.Numeric(precision=10, scale=2), nullable=True, default=0)
+    notes = db.Column(db.Text, nullable=True)
+    
+    # Relationships
+    fulfillments = db.relationship('PledgeFulfillment', backref='pledge', lazy=True, cascade='all, delete-orphan')
+
+    def get_outstanding_balance(self):
+        """Calculate outstanding balance for this pledge"""
+        return float(self.amount) - float(self.fulfilled_amount)
+    
+    def get_fulfillment_percentage(self):
+        """Calculate fulfillment percentage"""
+        if float(self.amount) == 0:
+            return 0
+        return (float(self.fulfilled_amount) / float(self.amount)) * 100
+    
+    def is_fully_fulfilled(self):
+        """Check if pledge is fully fulfilled"""
+        return self.get_outstanding_balance() <= 0
+    
+    def can_add_fulfillment(self, amount):
+        """Check if a fulfillment amount can be added without exceeding pledge amount"""
+        return float(self.fulfilled_amount) + float(amount) <= float(self.amount)
 
     def to_dict(self):
         return {
             'id': self.id,
             'amount': float(self.amount),
+            'fulfilled_amount': float(self.fulfilled_amount),
+            'outstanding_balance': self.get_outstanding_balance(),
+            'fulfillment_percentage': self.get_fulfillment_percentage(),
+            'is_fully_fulfilled': self.is_fully_fulfilled(),
             'pledge_date': self.pledge_date,
             'camp_id': self.camp_id,
             'camper_id': self.camper_id,
             'status': self.status,
+            'notes': self.notes,
+        }
+
+
+class PledgeFulfillment(BaseModel):
+    __tablename__ = 'pledge_fulfillments'
+    
+    # Core fulfillment fields
+    pledge_id = db.Column(String(36), db.ForeignKey('pledges.id'), nullable=False)
+    amount = db.Column(db.Numeric(precision=10, scale=2), nullable=False)
+    fulfillment_date = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    payment_method = db.Column(db.Enum('momo', 'cash', 'cheque', 'bank_transfer', 'card', name='fulfillment_payment_method'), nullable=False)
+    recorded_by = db.Column(String(36), db.ForeignKey('users.id'), nullable=False)
+    reference_number = db.Column(db.String(100), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    camp_id = db.Column(String(36), db.ForeignKey('camps.id'), nullable=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'pledge_id': self.pledge_id,
+            'amount': float(self.amount),
+            'fulfillment_date': self.fulfillment_date,
+            'payment_method': self.payment_method,
+            'recorded_by': self.recorded_by,
+            'reference_number': self.reference_number,
+            'notes': self.notes,
+            'camp_id': self.camp_id,
         }
 
 

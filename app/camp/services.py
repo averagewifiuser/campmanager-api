@@ -2932,6 +2932,7 @@ class PledgeService:
                 camper_id=pledge_data["camper_id"],
                 camp_id=pledge_data["camp_id"],
                 status=pledge_data["status"],
+                notes=pledge_data.get("notes"),
             )
 
             db.session.add(pledge)
@@ -2966,6 +2967,10 @@ class PledgeService:
             if "amount" in update_data and update_data["amount"] is not None:
                 if float(update_data["amount"]) <= 0:
                     raise ValueError("Amount must be greater than 0")
+                # Don't allow reducing pledge amount below already fulfilled amount
+                new_amount = float(update_data["amount"])
+                if new_amount < float(pledge.fulfilled_amount):
+                    raise ValueError(f"Cannot reduce pledge amount below already fulfilled amount of {pledge.fulfilled_amount}")
 
             # Validate status if being updated
             if "status" in update_data:
@@ -2986,13 +2991,17 @@ class PledgeService:
                     )
 
             # Update fields
-            updatable_fields = ["amount", "camper_id", "status"]
+            updatable_fields = ["amount", "camper_id", "status", "notes"]
             for field in updatable_fields:
                 if field in update_data:
                     if field == "amount" and update_data[field] is not None:
                         setattr(pledge, field, Decimal(str(update_data[field])))
                     else:
                         setattr(pledge, field, update_data[field])
+
+            # Update status automatically based on fulfillment
+            if pledge.is_fully_fulfilled() and pledge.status == "pending":
+                pledge.status = "fulfilled"
 
             db.session.commit()
 
@@ -3033,33 +3042,45 @@ class PledgeService:
             raise Exception("Failed to delete pledge")
 
     def get_camp_pledge_stats(self, camp_id: str) -> Dict[str, Any]:
-        """Get pledge statistics for a camp"""
+        """Get pledge statistics for a camp including partial fulfillment stats"""
         try:
             pledges = self.get_pledges_by_camp(camp_id)
 
             total_pledges = len(pledges)
-            total_amount = sum(float(pledge.amount) for pledge in pledges)
+            total_pledged_amount = sum(float(pledge.amount) for pledge in pledges)
+            total_fulfilled_amount = sum(float(pledge.fulfilled_amount) for pledge in pledges)
 
             pending_pledges = [p for p in pledges if p.status == "pending"]
             fulfilled_pledges = [p for p in pledges if p.status == "fulfilled"]
             cancelled_pledges = [p for p in pledges if p.status == "cancelled"]
 
-            pending_amount = sum(float(pledge.amount) for pledge in pending_pledges)
+            pending_pledged_amount = sum(float(pledge.amount) for pledge in pending_pledges)
+            pending_fulfilled_amount = sum(float(pledge.fulfilled_amount) for pledge in pending_pledges)
+            pending_outstanding_amount = sum(pledge.get_outstanding_balance() for pledge in pending_pledges)
+
             fulfilled_amount = sum(float(pledge.amount) for pledge in fulfilled_pledges)
             cancelled_amount = sum(float(pledge.amount) for pledge in cancelled_pledges)
 
+            # Partially fulfilled pledges (have some fulfillment but not complete)
+            partially_fulfilled = [p for p in pledges if float(p.fulfilled_amount) > 0 and not p.is_fully_fulfilled()]
+
             return {
                 "total_pledges": total_pledges,
-                "total_amount": total_amount,
+                "total_pledged_amount": total_pledged_amount,
+                "total_fulfilled_amount": total_fulfilled_amount,
+                "total_outstanding_amount": total_pledged_amount - total_fulfilled_amount,
                 "pending_pledges": len(pending_pledges),
-                "pending_amount": pending_amount,
+                "pending_pledged_amount": pending_pledged_amount,
+                "pending_fulfilled_amount": pending_fulfilled_amount,
+                "pending_outstanding_amount": pending_outstanding_amount,
                 "fulfilled_pledges": len(fulfilled_pledges),
                 "fulfilled_amount": fulfilled_amount,
                 "cancelled_pledges": len(cancelled_pledges),
                 "cancelled_amount": cancelled_amount,
+                "partially_fulfilled_pledges": len(partially_fulfilled),
                 "fulfillment_rate": (
-                    (len(fulfilled_pledges) / total_pledges * 100)
-                    if total_pledges > 0
+                    (total_fulfilled_amount / total_pledged_amount * 100)
+                    if total_pledged_amount > 0
                     else 0
                 ),
             }
@@ -3068,13 +3089,18 @@ class PledgeService:
             current_app.logger.error(f"Error in get_camp_pledge_stats: {str(e)}")
             return {
                 "total_pledges": 0,
-                "total_amount": 0,
+                "total_pledged_amount": 0,
+                "total_fulfilled_amount": 0,
+                "total_outstanding_amount": 0,
                 "pending_pledges": 0,
-                "pending_amount": 0,
+                "pending_pledged_amount": 0,
+                "pending_fulfilled_amount": 0,
+                "pending_outstanding_amount": 0,
                 "fulfilled_pledges": 0,
                 "fulfilled_amount": 0,
                 "cancelled_pledges": 0,
                 "cancelled_amount": 0,
+                "partially_fulfilled_pledges": 0,
                 "fulfillment_rate": 0,
             }
 
@@ -3101,37 +3127,12 @@ class PledgeService:
             old_status = pledge.status
             pledge.status = new_status
 
-            # If changing to fulfilled, create a financial record for income
+            # If changing to fulfilled, ensure the pledge amount is fully marked as fulfilled
             if new_status == "fulfilled" and old_status != "fulfilled":
-                financial_service = FinancialService()
-                financial_data = {
-                    "amount": float(pledge.amount),
-                    "received_by": "System",  # You might want to pass the user who fulfilled it
-                    "transaction_type": "income",
-                    "transaction_category": "pledge",
-                    "date": datetime.now(timezone.utc),
-                    "description": f"Pledge fulfillment - {pledge.amount}",
-                    "payment_method": "other",
-                    "approved_by": "System",
-                }
-                financial_service.create_financial(financial_data, camp_id)
-
-            # If changing from fulfilled to another status, you might want to reverse the financial record
-            # This is optional based on your business logic
-            elif old_status == "fulfilled" and new_status != "fulfilled":
-                # Optional: Create a reversal financial record
-                financial_service = FinancialService()
-                financial_data = {
-                    "amount": float(pledge.amount),
-                    "received_by": "System",
-                    "transaction_type": "expense",
-                    "transaction_category": "other",
-                    "date": datetime.now(timezone.utc),
-                    "description": f"Pledge status change reversal - {pledge.amount}",
-                    "payment_method": "other",
-                    "approved_by": "System",
-                }
-                financial_service.create_financial(financial_data, camp_id)
+                # Set fulfilled_amount to full pledge amount if changing to fulfilled
+                remaining_amount = pledge.get_outstanding_balance()
+                if remaining_amount > 0:
+                    pledge.fulfilled_amount = pledge.amount
 
             db.session.commit()
 
@@ -3154,6 +3155,163 @@ class PledgeService:
                 f"Unexpected error in change_pledge_status: {str(e)}"
             )
             raise Exception("Failed to change pledge status")
+
+    def add_fulfillment(self, pledge_id: str, fulfillment_data: Dict[str, Any], recorded_by: str, camp_id: str) -> Optional['PledgeFulfillment']:
+        """Add a partial fulfillment to a pledge"""
+        try:
+            from .models import PledgeFulfillment
+            
+            # Validate required fields
+            required_fields = ["amount", "payment_method"]
+            for field in required_fields:
+                if field not in fulfillment_data or fulfillment_data[field] is None:
+                    raise ValueError(f"Missing required field: {field}")
+
+            pledge = self.get_pledge_by_id(pledge_id, camp_id)
+            if not pledge:
+                raise ValueError("Pledge not found")
+
+            fulfillment_amount = float(fulfillment_data["amount"])
+            
+            # Validate fulfillment amount
+            if fulfillment_amount <= 0:
+                raise ValueError("Fulfillment amount must be greater than 0")
+
+            if not pledge.can_add_fulfillment(fulfillment_amount):
+                outstanding = pledge.get_outstanding_balance()
+                raise ValueError(f"Fulfillment amount ({fulfillment_amount}) exceeds outstanding balance ({outstanding})")
+
+            # Validate payment method
+            valid_payment_methods = ['momo', 'cash', 'cheque', 'bank_transfer', 'card']
+            if fulfillment_data["payment_method"] not in valid_payment_methods:
+                raise ValueError(f"Invalid payment method. Must be one of: {', '.join(valid_payment_methods)}")
+
+            # Create fulfillment record
+            fulfillment = PledgeFulfillment(
+                pledge_id=pledge_id,
+                amount=Decimal(str(fulfillment_amount)),
+                payment_method=fulfillment_data["payment_method"],
+                recorded_by=recorded_by,
+                reference_number=fulfillment_data.get("reference_number"),
+                notes=fulfillment_data.get("notes"),
+                camp_id=camp_id
+            )
+
+            # Update pledge fulfilled amount
+            pledge.fulfilled_amount = Decimal(str(float(pledge.fulfilled_amount) + fulfillment_amount))
+
+            # Update pledge status if now fully fulfilled
+            if pledge.is_fully_fulfilled() and pledge.status == "pending":
+                pledge.status = "fulfilled"
+
+            # Create financial record for the fulfillment
+            financial_service = FinancialService()
+            financial_data = {
+                "amount": fulfillment_amount,
+                "received_by": recorded_by,
+                "transaction_type": "income",
+                "transaction_category": "pledge",
+                "date": datetime.now(timezone.utc),
+                "description": f"Pledge fulfillment - {fulfillment_amount} (Partial: {pledge.fulfilled_amount}/{pledge.amount})",
+                "payment_method": fulfillment_data["payment_method"],
+                "approved_by": recorded_by,
+            }
+            financial_service.create_financial(financial_data, camp_id)
+
+            db.session.add(fulfillment)
+            db.session.commit()
+
+            current_app.logger.info(
+                f"Pledge fulfillment added: {fulfillment_amount} to pledge {pledge_id}"
+            )
+            return fulfillment
+
+        except ValueError:
+            raise
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in add_fulfillment: {str(e)}")
+            raise Exception("Failed to add fulfillment due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in add_fulfillment: {str(e)}")
+            raise Exception("Failed to add fulfillment")
+
+    def get_pledge_fulfillments(self, pledge_id: str, camp_id: str) -> List['PledgeFulfillment']:
+        """Get all fulfillments for a pledge"""
+        try:
+            from .models import PledgeFulfillment
+            
+            pledge = self.get_pledge_by_id(pledge_id, camp_id)
+            if not pledge:
+                return []
+                
+            return (
+                PledgeFulfillment.query.filter_by(pledge_id=pledge_id, camp_id=camp_id)
+                .order_by(PledgeFulfillment.fulfillment_date.desc())
+                .all()
+            )
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_pledge_fulfillments: {str(e)}")
+            return []
+
+    def get_fulfillment_by_id(self, fulfillment_id: str, camp_id: str) -> Optional['PledgeFulfillment']:
+        """Get a specific fulfillment by ID"""
+        try:
+            from .models import PledgeFulfillment
+            return PledgeFulfillment.query.filter_by(id=fulfillment_id, camp_id=camp_id).first()
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error in get_fulfillment_by_id: {str(e)}")
+            return None
+
+    def delete_fulfillment(self, fulfillment_id: str, camp_id: str) -> bool:
+        """Delete a fulfillment record and adjust pledge accordingly"""
+        try:
+            from .models import PledgeFulfillment
+            
+            fulfillment = self.get_fulfillment_by_id(fulfillment_id, camp_id)
+            if not fulfillment:
+                return False
+
+            pledge = self.get_pledge_by_id(fulfillment.pledge_id, camp_id)
+            if not pledge:
+                return False
+
+            # Adjust pledge fulfilled amount
+            pledge.fulfilled_amount = Decimal(str(float(pledge.fulfilled_amount) - float(fulfillment.amount)))
+            
+            # Update pledge status if no longer fully fulfilled
+            if pledge.status == "fulfilled" and not pledge.is_fully_fulfilled():
+                pledge.status = "pending"
+
+            # Create reversal financial record
+            financial_service = FinancialService()
+            financial_data = {
+                "amount": float(fulfillment.amount),
+                "received_by": "System",
+                "transaction_type": "expense",
+                "transaction_category": "other",
+                "date": datetime.now(timezone.utc),
+                "description": f"Pledge fulfillment reversal - {fulfillment.amount}",
+                "payment_method": fulfillment.payment_method,
+                "approved_by": "System",
+            }
+            financial_service.create_financial(financial_data, camp_id)
+
+            db.session.delete(fulfillment)
+            db.session.commit()
+
+            current_app.logger.info(f"Pledge fulfillment deleted: {fulfillment_id}")
+            return True
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error in delete_fulfillment: {str(e)}")
+            raise Exception("Failed to delete fulfillment due to database error")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected error in delete_fulfillment: {str(e)}")
+            raise Exception("Failed to delete fulfillment")
 
 
 class RoomService:

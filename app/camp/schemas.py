@@ -805,6 +805,7 @@ class PledgeRequestSchema(Schema):
     amount = fields.Decimal(required=True, validate=validate.Range(min=0))
     camper_id = fields.String(required=True)
     status = fields.String(required=True, validate=validate.OneOf(['pending', 'fulfilled', 'cancelled']))
+    notes = fields.String(required=False, allow_none=True)
 
 
 class PledgeStatusChangeSchema(Schema):
@@ -823,15 +824,47 @@ class PledgeStatusChangeWrapperSchema(Schema):
     data = fields.Nested(PledgeStatusChangeSchema, required=True)
 
 
+class PledgeFulfillmentRequestSchema(Schema):
+    """Schema for pledge fulfillment request"""
+    amount = fields.Decimal(required=True, validate=validate.Range(min=0.01))
+    payment_method = fields.String(required=True, validate=validate.OneOf(['momo', 'cash', 'cheque', 'bank_transfer', 'card']))
+    reference_number = fields.String(required=False, allow_none=True)
+    notes = fields.String(required=False, allow_none=True)
+
+
+class PledgeFulfillmentRequestWrapperSchema(Schema):
+    """Wrapper for pledge fulfillment request"""
+    data = fields.Nested(PledgeFulfillmentRequestSchema, required=True)
+
+
+class PledgeFulfillmentResponseSchema(BaseResponseSchema):
+    """Schema for pledge fulfillment response"""
+    pledge_id = fields.String(required=True)
+    amount = fields.Decimal(required=True)
+    fulfillment_date = fields.DateTime(required=True)
+    payment_method = fields.String(required=True)
+    recorded_by = fields.String(required=True)
+    reference_number = fields.String(required=False, allow_none=True)
+    notes = fields.String(required=False, allow_none=True)
+    camp_id = fields.String(required=True)
+
+
 class PledgeResponseSchema(BaseResponseSchema):
     """Schema for pledge response"""
     amount = fields.Decimal(required=True)
+    fulfilled_amount = fields.Decimal(required=True)
+    outstanding_balance = fields.Decimal(required=True)
+    fulfillment_percentage = fields.Float(required=True)
+    is_fully_fulfilled = fields.Boolean(required=True)
     pledge_date = fields.DateTime(required=True)
     camp_id = fields.String(required=True)
     camper_id = fields.String(required=True)
     camper_name = fields.String(required=True)
     camper_code = fields.String(required=True)
+    camper_phone_number = fields.String(required=True)
     status = fields.String(required=True)
+    notes = fields.String(required=False, allow_none=True)
+    fulfillments = fields.List(fields.Nested(PledgeFulfillmentResponseSchema), required=False)
 
 
 class PledgeResponseWrapperSchema(Schema):
@@ -842,6 +875,16 @@ class PledgeResponseWrapperSchema(Schema):
 class PledgeListResponseWrapperSchema(Schema):
     """Wrapper for pledge list response"""
     data = fields.List(fields.Nested(PledgeResponseSchema), required=True)
+
+
+class PledgeFulfillmentResponseWrapperSchema(Schema):
+    """Wrapper for pledge fulfillment response"""
+    data = fields.Nested(PledgeFulfillmentResponseSchema, required=True)
+
+
+class PledgeFulfillmentListResponseWrapperSchema(Schema):
+    """Wrapper for pledge fulfillment list response"""
+    data = fields.List(fields.Nested(PledgeFulfillmentResponseSchema), required=True)
 
 
 # Food Schemas
