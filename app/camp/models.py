@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Text, JSON, String, UniqueConstraint
+from sqlalchemy import Text, JSON, String, UniqueConstraint, func
 
 from app.extensions import db
 from app._shared.models import BaseModel
@@ -284,8 +284,56 @@ class Registration(BaseModel):
         return base_fee
 
     def get_total_payments(self):
-        """Calculate total amount paid by this registration"""
-        return sum(float(payment.amount) for payment in self.payments)
+        """Calculate total amount paid by this registration.
+
+        A payment may be linked to more than one registration. Each payment is
+        shared out across the registrations it covers, in proportion to what each
+        owes, so a group payment is never counted in full against every camper it
+        touches. A payment linked to a single registration - which is what
+        create_payment() produces - counts in full.
+
+        Resolved in one query rather than walking the relationship, so this stays
+        as cheap as the plain sum it replaces.
+
+        ReportService applies the same rule in bulk for a whole camp. If the
+        allocation rule changes, change it in both places.
+        """
+        my_payment_ids = db.session.query(
+            registration_payments.c.payment_id
+        ).filter(
+            registration_payments.c.registration_id == self.id
+        ).scalar_subquery()
+
+        rows = db.session.query(
+            Payment.amount,
+            func.count(Registration.id),
+            func.coalesce(func.sum(Registration.total_amount), 0),
+        ).select_from(Payment).join(
+            registration_payments,
+            registration_payments.c.payment_id == Payment.id,
+        ).join(
+            Registration,
+            Registration.id == registration_payments.c.registration_id,
+        ).filter(
+            Payment.id.in_(my_payment_ids)
+        ).group_by(Payment.id).all()
+
+        owed_by_me = float(self.total_amount or 0)
+        total = 0.0
+
+        for amount, link_count, owed_by_all in rows:
+            amount = float(amount or 0)
+            owed_by_all = float(owed_by_all or 0)
+
+            if link_count <= 1:
+                total += amount
+            elif owed_by_all > 0:
+                total += amount * (owed_by_me / owed_by_all)
+            else:
+                # Nothing owed to weight by - split evenly.
+                total += amount / link_count
+
+        return total
     
     def get_outstanding_balance(self):
         """Calculate outstanding balance for this registration"""

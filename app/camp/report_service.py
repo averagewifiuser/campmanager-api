@@ -4,11 +4,14 @@ Camp report aggregation.
 Builds the comprehensive end-of-camp report consumed by the web report page.
 All aggregation happens here so the frontend needs a single request.
 
-Note on payments: `Registration.get_total_payments()` sums the *full* amount of every
-linked payment. Because `registration_payments` is many-to-many, a payment shared by
-several campers would be counted once per camper. This module therefore allocates each
-payment across its linked registrations proportionally, and derives camp-level revenue
-from distinct payments. Existing model methods are intentionally left untouched.
+Note on payments: `registration_payments` is many-to-many, so a payment can cover
+several campers. Such a payment is shared out across the registrations it covers in
+proportion to what each owes, and camp-level revenue is taken from distinct payments
+so nothing is counted twice.
+
+This applies the same rule as `Registration.get_total_payments()`, but resolves the
+whole camp in two queries instead of one per registration. If the allocation rule
+changes, change it in both places.
 """
 
 from collections import Counter, defaultdict, OrderedDict
