@@ -133,6 +133,10 @@ def register_blueprints(app: APIFlask):
     # Public registration routes
     from .camp.public_routes import public_bp
     app.register_blueprint(public_bp)
+
+    # Camp report routes
+    from .camp.report_routes import report_bp
+    app.register_blueprint(report_bp)
     
     # Health check route
     @app.route('/health')
