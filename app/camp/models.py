@@ -426,13 +426,6 @@ class Payment(BaseModel):
         
         return result
     
-    def get_total_allocated_amount(self):
-        """Get total amount allocated to registrations from this payment"""
-        return sum(float(reg.total_amount) for reg in self.registrations)
-    
-    def get_remaining_amount(self):
-        """Get remaining unallocated amount from this payment"""
-        return float(self.amount) - self.get_total_allocated_amount()
 
 
 

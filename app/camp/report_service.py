@@ -27,6 +27,7 @@ from .models import (
     Camp,
     Category,
     Church,
+    CustomField,
     Financial,
     Food,
     FoodAllocation,
@@ -54,6 +55,10 @@ AGE_BANDS = (
 # Money below this is treated as settled, to absorb floating point drift from
 # proportional payment allocation.
 SETTLED_EPSILON = 0.01
+
+# A free-text custom field can hold as many distinct answers as there are campers.
+# Keep the top slice so one such field cannot flood the report.
+MAX_CUSTOM_FIELD_OPTIONS = 25
 
 
 def _round(value: float, places: int = 2) -> float:
@@ -114,6 +119,9 @@ class ReportService:
             churches = Church.query.filter_by(camp_id=camp_id).all()
             categories = Category.query.filter_by(camp_id=camp_id).all()
             links = RegistrationLink.query.filter_by(camp_id=camp_id).all()
+            custom_fields = CustomField.query.filter_by(camp_id=camp_id).order_by(
+                CustomField.order
+            ).all()
             rooms = Room.query.filter_by(camp_id=camp_id).all()
             allocations = RoomAllocation.query.filter_by(camp_id=camp_id).all()
             pledges = Pledge.query.filter_by(camp_id=camp_id).all()
@@ -139,6 +147,7 @@ class ReportService:
                 "registration": self._registration(camp, registrations, links),
                 "demographics": self._demographics(registrations),
                 "categories": self._categories(camp, registrations, categories, allocated),
+                "custom_fields": self._custom_fields(registrations, custom_fields),
                 "churches": self._churches(registrations, churches, allocated),
                 "payments": payments_section,
                 "accommodation": accommodation,
@@ -371,6 +380,82 @@ class ReportService:
 
         rows.sort(key=lambda row: row["count"], reverse=True)
         return rows
+
+    def _custom_fields(
+        self, registrations: List[Registration], custom_fields: List[CustomField]
+    ) -> List[Dict[str, Any]]:
+        """
+        Per-option counts for each of the camp's own questions.
+
+        Dropdown answers are a single value, checkbox answers a list - so for a
+        checkbox the counts can exceed the number of campers, and `is_multi_select`
+        flags that. Declared options nobody picked are kept at zero, because that
+        is itself worth knowing. Free-text answers are counted by value, capped so
+        a many-valued field cannot flood the report.
+        """
+        total = len(registrations)
+        sections = []
+
+        for field in custom_fields:
+            counter: Counter = Counter()
+            answered = 0
+
+            for registration in registrations:
+                responses = registration.custom_field_responses
+                if not isinstance(responses, dict):
+                    continue
+
+                raw = responses.get(field.id)
+                if isinstance(raw, list):
+                    values = [str(v).strip() for v in raw if str(v).strip()]
+                elif raw is None or isinstance(raw, bool):
+                    values = [] if raw is None else [str(raw)]
+                else:
+                    text = str(raw).strip()
+                    values = [text] if text else []
+
+                if values:
+                    answered += 1
+                    counter.update(values)
+
+            declared = field.options if isinstance(field.options, list) else []
+            # Declared options first (so zeros survive), then anything unexpected.
+            labels = list(
+                dict.fromkeys(
+                    [str(option) for option in declared] + list(counter.keys())
+                )
+            )
+
+            options = [
+                {
+                    "option": label,
+                    "count": counter.get(label, 0),
+                    "share": _rate(counter.get(label, 0), total),
+                }
+                for label in labels
+            ]
+            options.sort(key=lambda row: (-row["count"], row["option"]))
+
+            truncated = 0
+            if len(options) > MAX_CUSTOM_FIELD_OPTIONS:
+                truncated = len(options) - MAX_CUSTOM_FIELD_OPTIONS
+                options = options[:MAX_CUSTOM_FIELD_OPTIONS]
+
+            sections.append(
+                {
+                    "field_name": field.field_name,
+                    "field_type": field.field_type,
+                    "is_required": bool(field.is_required),
+                    "is_multi_select": field.field_type == "checkbox",
+                    "answered_count": answered,
+                    "unanswered_count": total - answered,
+                    "answered_rate": _rate(answered, total),
+                    "options": options,
+                    "options_truncated": truncated,
+                }
+            )
+
+        return sections
 
     def _churches(
         self,

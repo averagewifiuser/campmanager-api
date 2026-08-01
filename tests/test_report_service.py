@@ -15,6 +15,7 @@ from app.camp.models import (
     Camp,
     Category,
     Church,
+    CustomField,
     Financial,
     Food,
     FoodAllocation,
@@ -396,6 +397,105 @@ class TestCategoriesAndDemographics:
         assert demographics['age_min'] == 10
         assert demographics['age_max'] == 30
         assert demographics['age_median'] == 15.0
+
+
+class TestCustomFields:
+    """Per-option counts for the camp's own custom questions."""
+
+    def _field(self, camp, name, field_type, options):
+        record = CustomField(
+            field_name=name, field_type=field_type, options=options,
+            is_required=False, camp_id=camp.id,
+        )
+        db.session.add(record)
+        db.session.commit()
+        return record
+
+    def test_dropdown_options_are_counted(self, service, camp, church, category):
+        field = self._field(camp, 'T-Shirt Size', 'dropdown', ['S', 'M', 'L'])
+        for size in ['S', 'M', 'M']:
+            make_registration(
+                camp, church, category,
+                custom_field_responses={field.id: size},
+            )
+
+        section = service.get_camp_report(camp.id)['custom_fields'][0]
+        counts = {row['option']: row['count'] for row in section['options']}
+
+        assert section['field_name'] == 'T-Shirt Size'
+        assert counts['M'] == 2
+        assert counts['S'] == 1
+        assert section['answered_count'] == 3
+
+    def test_declared_options_nobody_picked_still_listed(
+        self, service, camp, church, category
+    ):
+        """A zero is a finding - it says nobody wanted that size."""
+        field = self._field(camp, 'T-Shirt Size', 'dropdown', ['S', 'M', 'XXL'])
+        make_registration(
+            camp, church, category, custom_field_responses={field.id: 'S'}
+        )
+
+        section = service.get_camp_report(camp.id)['custom_fields'][0]
+        counts = {row['option']: row['count'] for row in section['options']}
+
+        assert counts['XXL'] == 0
+        assert counts['M'] == 0
+
+    def test_checkbox_answers_count_each_selection(
+        self, service, camp, church, category
+    ):
+        """Checkbox is multi-select, so counts can exceed the camper count."""
+        field = self._field(camp, 'Meals needed', 'checkbox', ['Lunch', 'Supper'])
+        make_registration(
+            camp, church, category,
+            custom_field_responses={field.id: ['Lunch', 'Supper']},
+        )
+        make_registration(
+            camp, church, category, custom_field_responses={field.id: ['Lunch']}
+        )
+
+        section = service.get_camp_report(camp.id)['custom_fields'][0]
+        counts = {row['option']: row['count'] for row in section['options']}
+
+        assert counts['Lunch'] == 2
+        assert counts['Supper'] == 1
+        assert section['is_multi_select'] is True
+        assert section['answered_count'] == 2
+
+    def test_unanswered_registrations_are_reported(
+        self, service, camp, church, category
+    ):
+        field = self._field(camp, 'T-Shirt Size', 'dropdown', ['S', 'M'])
+        make_registration(
+            camp, church, category, custom_field_responses={field.id: 'S'}
+        )
+        make_registration(camp, church, category, custom_field_responses={})
+        make_registration(camp, church, category, custom_field_responses=None)
+
+        section = service.get_camp_report(camp.id)['custom_fields'][0]
+
+        assert section['answered_count'] == 1
+        assert section['unanswered_count'] == 2
+
+    def test_free_text_answers_are_counted_by_value(
+        self, service, camp, church, category
+    ):
+        """A text field still answers 'how many people said each thing'."""
+        field = self._field(camp, 'New breed church name', 'text', None)
+        for name in ['Grace Chapel', 'Grace Chapel', 'Hope Assembly']:
+            make_registration(
+                camp, church, category, custom_field_responses={field.id: name},
+            )
+
+        section = service.get_camp_report(camp.id)['custom_fields'][0]
+        counts = {row['option']: row['count'] for row in section['options']}
+
+        assert counts['Grace Chapel'] == 2
+        assert counts['Hope Assembly'] == 1
+
+    def test_camp_with_no_custom_fields_returns_empty_list(self, service, camp):
+        assert service.get_camp_report(camp.id)['custom_fields'] == []
 
 
 class TestChurches:

@@ -86,6 +86,24 @@ class ReportCategorySchema(Schema):
     checked_in = fields.Integer()
 
 
+class CustomFieldOptionSchema(Schema):
+    option = fields.String()
+    count = fields.Integer()
+    share = fields.Float()
+
+
+class ReportCustomFieldSchema(Schema):
+    field_name = fields.String()
+    field_type = fields.String()
+    is_required = fields.Boolean()
+    is_multi_select = fields.Boolean()
+    answered_count = fields.Integer()
+    unanswered_count = fields.Integer()
+    answered_rate = fields.Float()
+    options = fields.List(fields.Nested(CustomFieldOptionSchema))
+    options_truncated = fields.Integer()
+
+
 class ChurchRowSchema(Schema):
     name = fields.String()
     district = fields.String(allow_none=True)
@@ -261,6 +279,7 @@ class CampReportSchema(Schema):
     registration = fields.Nested(ReportRegistrationSchema)
     demographics = fields.Nested(ReportDemographicsSchema)
     categories = fields.List(fields.Nested(ReportCategorySchema))
+    custom_fields = fields.List(fields.Nested(ReportCustomFieldSchema))
     churches = fields.Nested(ReportChurchesSchema)
     payments = fields.Nested(ReportPaymentsSchema)
     accommodation = fields.Nested(ReportAccommodationSchema)
